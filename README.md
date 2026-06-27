@@ -4,7 +4,7 @@ Dashboard web application for the MangoScan automated mango sorting system.
 
 **Stack:** Vite + React + TypeScript + Tailwind CSS + shadcn/ui + Supabase
 
----
+<!-- ---
 
 ## Prerequisites
 
@@ -158,4 +158,4 @@ scripts/
 
 ## When hardware is connected
 
-When the real ESP32 + YOLOv8 pipeline is ready, it will write to the same Supabase tables the simulator uses (`scan_sessions`, `scan_images`, `detection_result`, `sorting_logs`). No changes to the web app are needed — just stop the simulator and let the hardware write live data.
+When the real ESP32 + YOLOv8 pipeline is ready, it will write to the same Supabase tables the simulator uses (`scan_sessions`, `scan_images`, `detection_result`, `sorting_logs`). No changes to the web app are needed — just stop the simulator and let the hardware write live data. -->
