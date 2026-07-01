@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { toast } from '@/hooks/use-toast'
+import { Badge } from '@/components/ui/badge'
 import { Loader2, User } from 'lucide-react'
 import { format } from 'date-fns'
 
@@ -57,7 +58,11 @@ export default function ProfilePage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
-          <div className="grid grid-cols-2 gap-3 text-sm">
+          <div className="grid grid-cols-3 gap-3 text-sm">
+            <div>
+              <p className="text-muted-foreground text-xs">Role</p>
+              <Badge variant="secondary" className="mt-0.5 capitalize">Admin</Badge>
+            </div>
             <div>
               <p className="text-muted-foreground text-xs">Account Created</p>
               <p className="font-medium">{format(new Date(profile.created_at), 'MMM d, yyyy')}</p>

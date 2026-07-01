@@ -24,5 +24,6 @@ dist-ssr
 *.sw?
 
 .claude
-/docs
+CLAUDE.md
+WebApp/docs
 .env
