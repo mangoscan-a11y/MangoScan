@@ -1,4 +1,5 @@
 export type UserStatus = 'active' | 'inactive'
+export type UserRole = 'admin'
 export type QualityVerdict = 'passed' | 'rejected'
 export type ClassType = 'variety' | 'disease'
 export type ActuationStatus = 'success' | 'failed'
@@ -9,6 +10,7 @@ export interface Profile {
   username: string
   full_name: string
   email: string | null
+  role: UserRole
   status: UserStatus
   created_at: string
   last_login: string | null
