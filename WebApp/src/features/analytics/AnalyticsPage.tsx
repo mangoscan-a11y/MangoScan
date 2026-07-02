@@ -90,13 +90,74 @@ function downloadCsv(data: VDailySummary[]) {
     d.avg_processing_time?.toFixed(2) ?? '',
   ])
   const csv = [header, ...rows].map((r) => r.join(',')).join('\n')
+  triggerDownload(csv, `mangoscan-summary-${format(new Date(), 'yyyy-MM-dd')}.csv`)
+}
+
+function triggerDownload(csv: string, filename: string) {
   const blob = new Blob([csv], { type: 'text/csv' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `mangoscan-analytics-${format(new Date(), 'yyyy-MM-dd')}.csv`
+  a.download = filename
   a.click()
   URL.revokeObjectURL(url)
+}
+
+async function downloadDetailedCsv(dateFrom: string, dateTo: string) {
+  const { data, error } = await supabase
+    .from('scan_sessions')
+    .select(`
+      scan_id, scan_datetime, quality_verdict, confidence_score, processing_time, bin_assigned,
+      mango_varieties ( variety_name ),
+      diseases ( disease_name, severity_level ),
+      profiles ( full_name, username ),
+      sorting_logs ( servo1_action, servo2_action, gate_target, actuation_status, latency_ms )
+    `)
+    .gte('scan_datetime', dateFrom)
+    .lte('scan_datetime', dateTo + 'T23:59:59Z')
+    .order('scan_datetime', { ascending: false })
+
+  if (error) throw error
+
+  type Row = {
+    scan_id: number
+    scan_datetime: string
+    quality_verdict: string
+    confidence_score: number | null
+    processing_time: number | null
+    bin_assigned: string | null
+    mango_varieties: { variety_name: string } | null
+    diseases: { disease_name: string; severity_level: string } | null
+    profiles: { full_name: string; username: string } | null
+    sorting_logs: { servo1_action: string | null; servo2_action: string | null; gate_target: string | null; actuation_status: string; latency_ms: number | null } | null
+  }
+
+  const header = [
+    'Scan ID', 'Date/Time', 'Variety', 'Disease', 'Severity',
+    'Verdict', 'Confidence (%)', 'Processing (s)', 'Bin Assigned',
+    'Operator', 'Servo 1', 'Servo 2', 'Gate Target', 'Actuation', 'Latency (ms)',
+  ]
+
+  const rows = (data as Row[]).map((r) => [
+    r.scan_id,
+    format(new Date(r.scan_datetime), 'yyyy-MM-dd HH:mm:ss'),
+    r.mango_varieties?.variety_name ?? '',
+    r.diseases?.disease_name ?? '',
+    r.diseases?.severity_level ?? '',
+    r.quality_verdict,
+    r.confidence_score?.toFixed(2) ?? '',
+    r.processing_time?.toFixed(2) ?? '',
+    r.bin_assigned ?? '',
+    r.profiles?.full_name ?? 'System',
+    r.sorting_logs?.servo1_action ?? '',
+    r.sorting_logs?.servo2_action ?? '',
+    r.sorting_logs?.gate_target ?? '',
+    r.sorting_logs?.actuation_status ?? '',
+    r.sorting_logs?.latency_ms ?? '',
+  ])
+
+  const csv = [header, ...rows].map((r) => r.join(',')).join('\n')
+  triggerDownload(csv, `mangoscan-scans-${format(new Date(), 'yyyy-MM-dd')}.csv`)
 }
 
 const tooltipStyle = {
@@ -109,6 +170,16 @@ const tooltipStyle = {
 export default function AnalyticsPage() {
   const [dateFrom, setDateFrom] = useState(format(subDays(new Date(), 7), 'yyyy-MM-dd'))
   const [dateTo, setDateTo] = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [exportingDetailed, setExportingDetailed] = useState(false)
+
+  async function handleDetailedExport() {
+    setExportingDetailed(true)
+    try {
+      await downloadDetailedCsv(dateFrom, dateTo)
+    } finally {
+      setExportingDetailed(false)
+    }
+  }
 
   const { data: daily, isLoading } = useDailySummary(dateFrom, dateTo)
   const { data: diseaseData } = useDiseaseSummary(dateFrom, dateTo)
@@ -166,7 +237,17 @@ export default function AnalyticsPage() {
             disabled={!daily || daily.length === 0}
           >
             <Download className="h-3.5 w-3.5" />
-            Export CSV
+            Summary CSV
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5 text-xs"
+            onClick={handleDetailedExport}
+            disabled={exportingDetailed}
+          >
+            <Download className="h-3.5 w-3.5" />
+            {exportingDetailed ? 'Exporting…' : 'Detailed CSV'}
           </Button>
         </div>
       </div>

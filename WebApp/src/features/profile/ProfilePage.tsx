@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { supabase } from '@/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -8,15 +8,21 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { toast } from '@/hooks/use-toast'
-import { Badge } from '@/components/ui/badge'
 import { Loader2, User } from 'lucide-react'
 import { format } from 'date-fns'
 
 export default function ProfilePage() {
-  const { profile } = useAuth()
-  const queryClient = useQueryClient()
+  const { profile, refreshProfile } = useAuth()
   const [fullName, setFullName] = useState(profile?.full_name ?? '')
   const [email, setEmail] = useState(profile?.email ?? '')
+
+  // Keep form in sync when the auth context profile updates
+  useEffect(() => {
+    if (profile) {
+      setFullName(profile.full_name)
+      setEmail(profile.email ?? '')
+    }
+  }, [profile])
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -27,8 +33,8 @@ export default function ProfilePage() {
         .eq('id', profile.id)
       if (error) throw error
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['profile'] })
+    onSuccess: async () => {
+      await refreshProfile()
       toast({ title: 'Profile updated', variant: 'success' })
     },
     onError: (err: Error) => {
@@ -58,11 +64,7 @@ export default function ProfilePage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
-          <div className="grid grid-cols-3 gap-3 text-sm">
-            <div>
-              <p className="text-muted-foreground text-xs">Role</p>
-              <Badge variant="secondary" className="mt-0.5 capitalize">Admin</Badge>
-            </div>
+          <div className="grid grid-cols-2 gap-3 text-sm">
             <div>
               <p className="text-muted-foreground text-xs">Account Created</p>
               <p className="font-medium">{format(new Date(profile.created_at), 'MMM d, yyyy')}</p>
