@@ -43,7 +43,7 @@ export function ScanDetailDrawer({ scan, onClose }: Props) {
         {scan && (
           <div className="space-y-5">
             {/* Meta */}
-            <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
               <div className="space-y-0.5">
                 <p className="text-muted-foreground">Date & Time</p>
                 <p className="font-medium">{format(new Date(scan.scan_datetime), 'MMM d, yyyy HH:mm:ss')}</p>
@@ -55,6 +55,29 @@ export function ScanDetailDrawer({ scan, onClose }: Props) {
               <div className="space-y-0.5">
                 <p className="text-muted-foreground">Disease</p>
                 <p className="font-medium">{scan.diseases?.disease_name ?? '—'}</p>
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-muted-foreground">Bruise</p>
+                <p className="font-medium">
+                  {scan.is_bruised == null ? '—' : (
+                    <span className="inline-flex items-center gap-1">
+                      {scan.is_bruised ? 'Bruised' : 'Not Bruised'}
+                      {scan.bruise_confidence != null && (
+                        <span className="text-xs text-muted-foreground font-mono">
+                          ({scan.bruise_confidence.toFixed(1)}%)
+                        </span>
+                      )}
+                    </span>
+                  )}
+                </p>
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-muted-foreground">Color</p>
+                <p className="font-medium">{scan.ripeness_levels?.ripeness_name ?? '—'}</p>
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-muted-foreground">Size</p>
+                <p className="font-medium">{scan.size_grades?.size_name ?? '—'}</p>
               </div>
               <div className="space-y-0.5">
                 <p className="text-muted-foreground">Confidence</p>

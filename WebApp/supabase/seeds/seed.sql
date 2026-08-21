@@ -2,6 +2,9 @@
 -- Run AFTER migrations; creates reference data + sample accounts
 -- NOTE: User accounts must first be created via Supabase Auth (Dashboard or signup).
 --       Copy the UUIDs from auth.users into the profile inserts below.
+-- NOTE: Migration 006 already renames 'Mango Apple' -> 'Apple Mango' and
+--       inserts Chupadera / Wani / Kabayo. This file adds the remaining
+--       3 varieties so a fresh install ends up with all 6.
 
 -- ============================================================
 -- MANGO VARIETIES
@@ -10,7 +13,7 @@
 insert into mango_varieties (variety_name, description, market_price) values
   ('Carabao',     'The premium Philippine mango — sweet, rich, fiber-free flesh. Golden-yellow when ripe.', 120.00),
   ('Indian',      'Smaller, fiber-rich variety with a tartly sweet flavor. Common in local markets.',        75.00),
-  ('Mango Apple', 'Round, apple-sized mango with a firm texture and mild sweetness.',                       90.00)
+  ('Apple Mango', 'Round, apple-sized mango with a firm texture and mild sweetness.',                       90.00)
 on conflict (variety_name) do nothing;
 
 -- ============================================================
@@ -24,6 +27,27 @@ insert into diseases (disease_name, description, severity_level) values
 on conflict (disease_name) do nothing;
 
 -- ============================================================
+-- RIPENESS LEVELS (Color)
+-- ============================================================
+
+insert into ripeness_levels (ripeness_name, description, sort_order) values
+  ('Green',    'Unripe — skin is fully green, flesh is firm and starchy.',            1),
+  ('Turning',  'Early ripening — green skin showing the first yellow blush.',         2),
+  ('Ripe',     'Fully ripe — golden-yellow skin, ready for market.',                  3),
+  ('Overripe', 'Past peak ripeness — skin shows wrinkling or dark spots, soft flesh.', 4)
+on conflict (ripeness_name) do nothing;
+
+-- ============================================================
+-- SIZE GRADES
+-- ============================================================
+
+insert into size_grades (size_name, description, min_grams, max_grams, sort_order) values
+  ('Small',  'Small-grade fruit, typically undersized for premium export.', 100, 199, 1),
+  ('Medium', 'Standard mid-market size grade.',                             200, 349, 2),
+  ('Large',  'Large-grade fruit, premium export size.',                     350, 600, 3)
+on conflict (size_name) do nothing;
+
+-- ============================================================
 -- SAMPLE SCAN SESSIONS + IMAGES + DETECTIONS + LOGS
 -- (uses the service-role key path; profiles not required here)
 -- ============================================================
@@ -34,41 +58,71 @@ declare
   v_scan_id bigint;
   v_variety_id bigint;
   v_disease_id bigint;
+  v_ripeness_id bigint;
+  v_size_id bigint;
+  v_bruised boolean;
   v_verdict quality_verdict;
   v_days_ago int;
   i int;
   j int;
+  variety_ids bigint[];
+  ripeness_ids bigint[];
+  size_ids bigint[];
+  n_varieties int;
+  n_ripeness int;
+  n_sizes int;
 begin
+  select array_agg(variety_id order by variety_id) into variety_ids from mango_varieties;
+  select array_agg(ripeness_id order by sort_order) into ripeness_ids from ripeness_levels;
+  select array_agg(size_id order by sort_order) into size_ids from size_grades;
+  n_varieties := array_length(variety_ids, 1);
+  n_ripeness := array_length(ripeness_ids, 1);
+  n_sizes := array_length(size_ids, 1);
+
   for i in 1..30 loop
-    -- Rotate variety
-    v_variety_id := ((i - 1) % 3) + 1;
+    -- Rotate through whatever varieties/ripeness levels/sizes actually exist
+    v_variety_id  := variety_ids[((i - 1) % n_varieties) + 1];
+    v_ripeness_id := ripeness_ids[((i - 1) % n_ripeness) + 1];
+    v_size_id     := size_ids[((i - 1) % n_sizes) + 1];
+    v_bruised     := (i % 4 = 0); -- ~25% bruised
 
     -- Healthy 70%, diseased 30%
     if i % 10 < 7 then
-      v_disease_id := 1; -- Healthy
+      v_disease_id := (select disease_id from diseases where disease_name = 'Healthy');
       v_verdict := 'passed';
     elsif i % 2 = 0 then
-      v_disease_id := 2; -- Anthracnose
+      v_disease_id := (select disease_id from diseases where disease_name = 'Anthracnose');
       v_verdict := 'rejected';
     else
-      v_disease_id := 3; -- Mango Scab
+      v_disease_id := (select disease_id from diseases where disease_name = 'Mango Scab');
+      v_verdict := 'rejected';
+    end if;
+
+    -- Bruised fruit is rejected regardless of disease status
+    if v_bruised then
       v_verdict := 'rejected';
     end if;
 
     v_days_ago := (i % 7);
 
     insert into scan_sessions (
-      variety_id, disease_id, quality_verdict,
-      confidence_score, processing_time, bin_assigned, scan_datetime
+      variety_id, disease_id, ripeness_id, size_id, is_bruised, bruise_confidence,
+      quality_verdict, confidence_score, processing_time, bin_assigned, scan_datetime
     )
     values (
       v_variety_id,
       v_disease_id,
+      v_ripeness_id,
+      v_size_id,
+      v_bruised,
+      case when v_bruised then round((70 + random() * 28)::numeric, 2) else round((5 + random() * 20)::numeric, 2) end,
       v_verdict,
       round((75 + random() * 24)::numeric, 2),
       round((1.2 + random() * 2.5)::numeric, 2),
-      case v_verdict when 'rejected' then 'Rejected Lane'
-                     else (array['Carabao Lane','Indian Lane','Apple Lane'])[v_variety_id] end,
+      case v_verdict
+        when 'rejected' then 'Rejected Lane'
+        else (select variety_name || ' Lane' from mango_varieties where variety_id = v_variety_id)
+      end,
       now() - (v_days_ago || ' days')::interval - (random() * interval '8 hours')
     )
     returning scan_id into v_scan_id;
@@ -84,11 +138,11 @@ begin
       );
     end loop;
 
-    -- 2 detection results per scan
+    -- 5 detection results per scan — one per classification dimension
     insert into detection_result (scan_id, detected_class, class_type, confidence, bbox_x, bbox_y, bbox_w, bbox_h)
     values
       (v_scan_id,
-       (array['Carabao','Indian','Mango Apple'])[v_variety_id],
+       (select variety_name from mango_varieties where variety_id = v_variety_id),
        'variety',
        round((75 + random() * 24)::numeric, 2),
        20, 30, 200, 180),
@@ -96,17 +150,33 @@ begin
        (select disease_name from diseases where disease_id = v_disease_id),
        'disease',
        round((70 + random() * 28)::numeric, 2),
-       25, 35, 190, 170);
+       25, 35, 190, 170),
+      (v_scan_id,
+       case when v_bruised then 'Bruised' else 'Not Bruised' end,
+       'bruise',
+       round((70 + random() * 28)::numeric, 2),
+       30, 40, 180, 160),
+      (v_scan_id,
+       (select ripeness_name from ripeness_levels where ripeness_id = v_ripeness_id),
+       'color',
+       round((75 + random() * 24)::numeric, 2),
+       15, 20, 210, 190),
+      (v_scan_id,
+       (select size_name from size_grades where size_id = v_size_id),
+       'size',
+       round((75 + random() * 24)::numeric, 2),
+       10, 15, 220, 200);
 
     -- 1 sorting log per scan
     insert into sorting_logs (scan_id, servo1_action, servo2_action, gate_target, actuation_status, latency_ms)
     values (
       v_scan_id,
       case v_verdict when 'rejected' then 'CLOSE' else 'OPEN' end,
-      case v_verdict when 'rejected' then 'CENTER'
-                     else (array['LEFT','CENTER','RIGHT'])[v_variety_id] end,
-      case v_verdict when 'rejected' then 'Rejected Lane'
-                     else (array['Carabao Lane','Indian Lane','Apple Lane'])[v_variety_id] end,
+      case v_verdict when 'rejected' then 'CENTER' else 'ROUTE' end,
+      case v_verdict
+        when 'rejected' then 'Rejected Lane'
+        else (select variety_name || ' Lane' from mango_varieties where variety_id = v_variety_id)
+      end,
       'success',
       floor(80 + random() * 120)::int
     );
@@ -117,22 +187,15 @@ end $$;
 -- DAILY SUMMARY (backfill from scan_sessions)
 -- ============================================================
 
-insert into daily_summary (summary_date, total_scanned, total_passed, total_rejected, carabao_count, indian_count, apple_count)
+insert into daily_summary (summary_date, total_scanned, total_passed, total_rejected)
 select
   date_trunc('day', s.scan_datetime at time zone 'Asia/Manila')::date,
   count(*),
   count(*) filter (where s.quality_verdict = 'passed'),
-  count(*) filter (where s.quality_verdict = 'rejected'),
-  count(*) filter (where mv.variety_name = 'Carabao'),
-  count(*) filter (where mv.variety_name = 'Indian'),
-  count(*) filter (where mv.variety_name = 'Mango Apple')
+  count(*) filter (where s.quality_verdict = 'rejected')
 from scan_sessions s
-left join mango_varieties mv on mv.variety_id = s.variety_id
 group by 1
 on conflict (summary_date) do update set
   total_scanned  = excluded.total_scanned,
   total_passed   = excluded.total_passed,
-  total_rejected = excluded.total_rejected,
-  carabao_count  = excluded.carabao_count,
-  indian_count   = excluded.indian_count,
-  apple_count    = excluded.apple_count;
+  total_rejected = excluded.total_rejected;

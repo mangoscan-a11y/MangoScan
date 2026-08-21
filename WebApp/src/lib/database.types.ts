@@ -1,9 +1,10 @@
 export type UserStatus = 'active' | 'inactive'
 export type UserRole = 'admin'
 export type QualityVerdict = 'passed' | 'rejected'
-export type ClassType = 'variety' | 'disease'
+export type ClassType = 'variety' | 'disease' | 'bruise' | 'color' | 'size'
 export type ActuationStatus = 'success' | 'failed'
 export type SeverityLevel = 'none' | 'low' | 'moderate' | 'high'
+export type ClassificationDimension = 'variety' | 'disease' | 'bruise' | 'color' | 'size'
 
 export interface Profile {
   id: string
@@ -30,11 +31,31 @@ export interface Disease {
   severity_level: SeverityLevel
 }
 
+export interface RipenessLevel {
+  ripeness_id: number
+  ripeness_name: string
+  description: string | null
+  sort_order: number
+}
+
+export interface SizeGrade {
+  size_id: number
+  size_name: string
+  description: string | null
+  min_grams: number | null
+  max_grams: number | null
+  sort_order: number
+}
+
 export interface ScanSession {
   scan_id: number
   user_id: string | null
   variety_id: number | null
   disease_id: number | null
+  ripeness_id: number | null
+  size_id: number | null
+  is_bruised: boolean | null
+  bruise_confidence: number | null
   quality_verdict: QualityVerdict
   confidence_score: number | null
   processing_time: number | null
@@ -80,9 +101,6 @@ export interface DailySummary {
   total_scanned: number
   total_passed: number
   total_rejected: number
-  carabao_count: number
-  indian_count: number
-  apple_count: number
 }
 
 export interface VDailySummary {
@@ -90,16 +108,23 @@ export interface VDailySummary {
   total_scanned: number
   total_passed: number
   total_rejected: number
-  carabao_count: number
-  indian_count: number
-  apple_count: number
   avg_confidence: number | null
   avg_processing_time: number | null
+}
+
+export interface VDailyClassification {
+  summary_date: string
+  dimension: ClassificationDimension
+  label: string
+  count: number
+  sort_order: number
 }
 
 // Joined types used in the UI
 export interface ScanSessionWithRelations extends ScanSession {
   mango_varieties: MangoVariety | null
   diseases: Disease | null
+  ripeness_levels: RipenessLevel | null
+  size_grades: SizeGrade | null
   profiles: Pick<Profile, 'full_name' | 'username'> | null
 }
