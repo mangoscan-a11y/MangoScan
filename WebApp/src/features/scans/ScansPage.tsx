@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { format } from 'date-fns'
-import { useScanSessions, useMangoVarieties, useDiseases, type ScanFilters } from './hooks'
+import { useScanSessions, useMangoVarieties, useDiseases, useRipenessLevels, useSizeGrades, type ScanFilters } from './hooks'
 import { ScanDetailDrawer } from './ScanDetailDrawer'
 import type { ScanSessionWithRelations } from '@/lib/database.types'
 import { Badge } from '@/components/ui/badge'
@@ -36,6 +36,8 @@ export default function ScansPage() {
   const { data, isLoading } = useScanSessions(activeFilters)
   const { data: varieties } = useMangoVarieties()
   const { data: diseases } = useDiseases()
+  const { data: ripenessLevels } = useRipenessLevels()
+  const { data: sizeGrades } = useSizeGrades()
 
   const totalPages = Math.ceil((data?.count ?? 0) / PAGE_SIZE)
 
@@ -116,6 +118,54 @@ export default function ScansPage() {
             </div>
 
             <div className="space-y-1">
+              <Label className="text-xs">Color</Label>
+              <Select value={filters.ripenessId ?? ''} onValueChange={(v) => applyFilter('ripenessId', v)}>
+                <SelectTrigger className="h-8 w-32 text-xs">
+                  <SelectValue placeholder="All" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">All</SelectItem>
+                  {ripenessLevels?.map((r) => (
+                    <SelectItem key={r.ripeness_id} value={String(r.ripeness_id)}>
+                      {r.ripeness_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs">Size</Label>
+              <Select value={filters.sizeId ?? ''} onValueChange={(v) => applyFilter('sizeId', v)}>
+                <SelectTrigger className="h-8 w-28 text-xs">
+                  <SelectValue placeholder="All" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">All</SelectItem>
+                  {sizeGrades?.map((s) => (
+                    <SelectItem key={s.size_id} value={String(s.size_id)}>
+                      {s.size_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs">Bruised</Label>
+              <Select value={filters.bruised ?? ''} onValueChange={(v) => applyFilter('bruised', v)}>
+                <SelectTrigger className="h-8 w-28 text-xs">
+                  <SelectValue placeholder="All" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">All</SelectItem>
+                  <SelectItem value="true">Bruised</SelectItem>
+                  <SelectItem value="false">Not Bruised</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
               <Label className="text-xs">From</Label>
               <Input
                 type="date"
@@ -159,6 +209,9 @@ export default function ScansPage() {
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">Date & Time</th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">Variety</th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">Disease</th>
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Bruised</th>
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Color</th>
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Size</th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">Verdict</th>
                 <th className="px-4 py-3 text-right font-medium text-muted-foreground">Confidence</th>
                 <th className="px-4 py-3 text-right font-medium text-muted-foreground">Time (s)</th>
@@ -169,7 +222,7 @@ export default function ScansPage() {
               {isLoading
                 ? Array.from({ length: 8 }).map((_, i) => (
                     <tr key={i} className="border-b border-border/50">
-                      {Array.from({ length: 8 }).map((_, j) => (
+                      {Array.from({ length: 11 }).map((_, j) => (
                         <td key={j} className="px-4 py-3">
                           <Skeleton className="h-4 w-full" />
                         </td>
@@ -192,6 +245,15 @@ export default function ScansPage() {
                       <td className="px-4 py-3">{scan.mango_varieties?.variety_name ?? '—'}</td>
                       <td className="px-4 py-3">{scan.diseases?.disease_name ?? '—'}</td>
                       <td className="px-4 py-3">
+                        {scan.is_bruised == null ? '—' : (
+                          <Badge variant={scan.is_bruised ? 'destructive' : 'success'}>
+                            {scan.is_bruised ? 'Bruised' : 'Not Bruised'}
+                          </Badge>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">{scan.ripeness_levels?.ripeness_name ?? '—'}</td>
+                      <td className="px-4 py-3">{scan.size_grades?.size_name ?? '—'}</td>
+                      <td className="px-4 py-3">
                         <VerdictBadge verdict={scan.quality_verdict} />
                       </td>
                       <td className="px-4 py-3 text-right font-mono">
@@ -206,7 +268,7 @@ export default function ScansPage() {
 
               {!isLoading && data?.data.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
+                  <td colSpan={11} className="px-4 py-12 text-center text-muted-foreground">
                     No scans found matching the current filters.
                   </td>
                 </tr>

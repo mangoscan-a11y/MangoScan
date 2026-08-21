@@ -1,35 +1,45 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import type { ScanSessionWithRelations } from '@/lib/database.types'
+import type { ScanSessionWithRelations, VDailySummary, VDailyClassification } from '@/lib/database.types'
+import { DIMENSIONS, pivotDailyClassification } from '@/lib/classification'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { CheckCircle2, XCircle, Layers, Leaf, Clock, Activity } from 'lucide-react'
+import { CheckCircle2, XCircle, Layers, Clock, Activity } from 'lucide-react'
 import { format } from 'date-fns'
 
-function useTodayStats() {
-  return useQuery({
-    queryKey: ['today_stats'],
-    queryFn: async () => {
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
+function todayInManila() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date())
+}
 
+function useTodaySummary() {
+  return useQuery({
+    queryKey: ['today_summary'],
+    queryFn: async () => {
       const { data, error } = await supabase
-        .from('scan_sessions')
-        .select('quality_verdict, variety_id, mango_varieties(variety_name)')
-        .gte('scan_datetime', today.toISOString())
+        .from('v_daily_summary')
+        .select('*')
+        .eq('summary_date', todayInManila())
+        .maybeSingle()
 
       if (error) throw error
+      return data as VDailySummary | null
+    },
+    refetchInterval: 15_000,
+  })
+}
 
-      const rows = data as unknown as Array<{ quality_verdict: string; mango_varieties: { variety_name: string } | null }>
-      const total = rows.length
-      const passed = rows.filter((r) => r.quality_verdict === 'passed').length
-      const rejected = rows.filter((r) => r.quality_verdict === 'rejected').length
-      const carabao = rows.filter((r) => r.mango_varieties?.variety_name === 'Carabao').length
-      const indian = rows.filter((r) => r.mango_varieties?.variety_name === 'Indian').length
-      const apple = rows.filter((r) => r.mango_varieties?.variety_name === 'Mango Apple').length
+function useTodayClassification() {
+  return useQuery({
+    queryKey: ['today_classification'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('v_daily_classification')
+        .select('*')
+        .eq('summary_date', todayInManila())
 
-      return { total, passed, rejected, carabao, indian, apple }
+      if (error) throw error
+      return data as VDailyClassification[]
     },
     refetchInterval: 15_000,
   })
@@ -45,13 +55,15 @@ function useLatestScan() {
           *,
           mango_varieties ( variety_id, variety_name ),
           diseases ( disease_id, disease_name, severity_level ),
+          ripeness_levels ( ripeness_id, ripeness_name ),
+          size_grades ( size_id, size_name ),
           profiles ( full_name, username )
         `)
         .order('scan_datetime', { ascending: false })
         .limit(1)
-        .single()
+        .maybeSingle()
 
-      if (error && error.code !== 'PGRST116') throw error
+      if (error) throw error
       return data as ScanSessionWithRelations | null
     },
     refetchInterval: 15_000,
@@ -67,7 +79,7 @@ function useLastLatency() {
         .select('latency_ms, actuation_status, logged_at')
         .order('logged_at', { ascending: false })
         .limit(1)
-        .single()
+        .maybeSingle()
       return data
     },
     refetchInterval: 15_000,
@@ -102,8 +114,44 @@ function StatCard({ title, value, icon: Icon, iconClass, loading }: StatCardProp
   )
 }
 
+function DimensionCard({
+  title,
+  breakdown,
+  loading,
+}: {
+  title: string
+  breakdown: { name: string; value: number }[]
+  loading: boolean
+}) {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+      </CardHeader>
+      <CardContent className="pt-0 space-y-1.5">
+        {loading ? (
+          <>
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-3/4" />
+          </>
+        ) : breakdown.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No scans yet today.</p>
+        ) : (
+          breakdown.map((b) => (
+            <div key={b.name} className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground truncate">{b.name}</span>
+              <span className="font-mono font-medium">{b.value}</span>
+            </div>
+          ))
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 export default function MonitorPage() {
-  const { data: stats, isLoading: statsLoading } = useTodayStats()
+  const { data: summary, isLoading: summaryLoading } = useTodaySummary()
+  const { data: classification, isLoading: classificationLoading } = useTodayClassification()
   const { data: latest, isLoading: latestLoading } = useLatestScan()
   const { data: latency } = useLastLatency()
 
@@ -131,16 +179,28 @@ export default function MonitorPage() {
         </div>
       </div>
 
-      {/* Today's counters */}
+      {/* Today's totals */}
       <div>
         <h2 className="text-sm font-medium text-muted-foreground mb-3">Today's Totals</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          <StatCard title="Total Scanned" value={stats?.total ?? 0} icon={Layers} iconClass="bg-secondary text-foreground" loading={statsLoading} />
-          <StatCard title="Passed" value={stats?.passed ?? 0} icon={CheckCircle2} iconClass="bg-success/10 text-success" loading={statsLoading} />
-          <StatCard title="Rejected" value={stats?.rejected ?? 0} icon={XCircle} iconClass="bg-destructive/10 text-destructive" loading={statsLoading} />
-          <StatCard title="Carabao" value={stats?.carabao ?? 0} icon={Leaf} iconClass="bg-yellow-500/10 text-yellow-500" loading={statsLoading} />
-          <StatCard title="Indian" value={stats?.indian ?? 0} icon={Leaf} iconClass="bg-orange-500/10 text-orange-500" loading={statsLoading} />
-          <StatCard title="Mango Apple" value={stats?.apple ?? 0} icon={Leaf} iconClass="bg-green-500/10 text-green-500" loading={statsLoading} />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <StatCard title="Total Scanned" value={summary?.total_scanned ?? 0} icon={Layers} iconClass="bg-secondary text-foreground" loading={summaryLoading} />
+          <StatCard title="Passed" value={summary?.total_passed ?? 0} icon={CheckCircle2} iconClass="bg-success/10 text-success" loading={summaryLoading} />
+          <StatCard title="Rejected" value={summary?.total_rejected ?? 0} icon={XCircle} iconClass="bg-destructive/10 text-destructive" loading={summaryLoading} />
+        </div>
+      </div>
+
+      {/* Today's classification breakdown */}
+      <div>
+        <h2 className="text-sm font-medium text-muted-foreground mb-3">Today's Classification</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          {DIMENSIONS.map((dim) => (
+            <DimensionCard
+              key={dim.key}
+              title={dim.label}
+              breakdown={pivotDailyClassification(classification, dim.key)}
+              loading={classificationLoading}
+            />
+          ))}
         </div>
       </div>
 
@@ -174,7 +234,7 @@ export default function MonitorPage() {
               </div>
             </CardHeader>
             <CardContent className="pt-0">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 text-sm">
                 <div>
                   <p className="text-muted-foreground text-xs">Variety</p>
                   <p className="font-medium">{latest.mango_varieties?.variety_name ?? '—'}</p>
@@ -182,6 +242,20 @@ export default function MonitorPage() {
                 <div>
                   <p className="text-muted-foreground text-xs">Disease</p>
                   <p className="font-medium">{latest.diseases?.disease_name ?? '—'}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs">Bruise</p>
+                  <p className={`font-medium ${latest.is_bruised ? 'text-destructive' : ''}`}>
+                    {latest.is_bruised == null ? '—' : latest.is_bruised ? 'Bruised' : 'Not Bruised'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs">Color</p>
+                  <p className="font-medium">{latest.ripeness_levels?.ripeness_name ?? '—'}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs">Size</p>
+                  <p className="font-medium">{latest.size_grades?.size_name ?? '—'}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground text-xs">Confidence</p>

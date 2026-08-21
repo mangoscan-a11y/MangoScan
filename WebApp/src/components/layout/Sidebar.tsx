@@ -25,11 +25,7 @@ const mainNav = [
 	{ to: '/', icon: Monitor, label: 'Live Monitor' },
 	{ to: '/scans', icon: History, label: 'Scan History' },
 	{ to: '/analytics', icon: BarChart3, label: 'Analytics' },
-];
-
-const referenceNav = [
-	{ to: '/admin/varieties', icon: Database, label: 'Varieties' },
-	{ to: '/admin/diseases', icon: Database, label: 'Diseases' },
+	{ to: '/admin/classification', icon: Database, label: 'Classification' },
 ];
 
 function NavItem({
@@ -120,17 +116,6 @@ export function Sidebar() {
 					{mainNav.map((item) => (
 						<NavItem key={item.to} {...item} />
 					))}
-				</div>
-
-				<div>
-					<p className='px-3 mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60'>
-						Classification
-					</p>
-					<div className='space-y-1'>
-						{referenceNav.map((item) => (
-							<NavItem key={item.to} {...item} />
-						))}
-					</div>
 				</div>
 
 				<div>

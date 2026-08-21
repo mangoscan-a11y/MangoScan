@@ -8,8 +8,7 @@ import MonitorPage from '@/features/monitor/MonitorPage'
 import ScansPage from '@/features/scans/ScansPage'
 import AnalyticsPage from '@/features/analytics/AnalyticsPage'
 import UsersPage from '@/features/admin/users/UsersPage'
-import VarietiesPage from '@/features/admin/varieties/VarietiesPage'
-import DiseasesPage from '@/features/admin/diseases/DiseasesPage'
+import ClassificationPage from '@/features/admin/classification/ClassificationPage'
 import ProfilePage from '@/features/profile/ProfilePage'
 
 const queryClient = new QueryClient({
@@ -36,8 +35,7 @@ export default function App() {
               <Route path="/profile" element={<ProfilePage />} />
 
               <Route path="/admin/users" element={<UsersPage />} />
-              <Route path="/admin/varieties" element={<VarietiesPage />} />
-              <Route path="/admin/diseases" element={<DiseasesPage />} />
+              <Route path="/admin/classification" element={<ClassificationPage />} />
 
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>

@@ -6,6 +6,9 @@ export interface ScanFilters {
   verdict?: string
   varietyId?: string
   diseaseId?: string
+  ripenessId?: string
+  sizeId?: string
+  bruised?: string
   dateFrom?: string
   dateTo?: string
   page: number
@@ -25,6 +28,8 @@ export function useScanSessions(filters: ScanFilters) {
           *,
           mango_varieties ( variety_id, variety_name ),
           diseases ( disease_id, disease_name, severity_level ),
+          ripeness_levels ( ripeness_id, ripeness_name ),
+          size_grades ( size_id, size_name ),
           profiles ( full_name, username )
         `, { count: 'exact' })
         .order('scan_datetime', { ascending: false })
@@ -33,6 +38,9 @@ export function useScanSessions(filters: ScanFilters) {
       if (filters.verdict) query = query.eq('quality_verdict', filters.verdict)
       if (filters.varietyId) query = query.eq('variety_id', filters.varietyId)
       if (filters.diseaseId) query = query.eq('disease_id', filters.diseaseId)
+      if (filters.ripenessId) query = query.eq('ripeness_id', filters.ripenessId)
+      if (filters.sizeId) query = query.eq('size_id', filters.sizeId)
+      if (filters.bruised) query = query.eq('is_bruised', filters.bruised === 'true')
       if (filters.dateFrom) query = query.gte('scan_datetime', filters.dateFrom)
       if (filters.dateTo) query = query.lte('scan_datetime', filters.dateTo + 'T23:59:59Z')
 
@@ -98,6 +106,30 @@ export function useDiseases() {
     queryKey: ['diseases'],
     queryFn: async () => {
       const { data, error } = await supabase.from('diseases').select('*').order('disease_name')
+      if (error) throw error
+      return data
+    },
+    staleTime: Infinity,
+  })
+}
+
+export function useRipenessLevels() {
+  return useQuery({
+    queryKey: ['ripeness_levels'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('ripeness_levels').select('*').order('sort_order')
+      if (error) throw error
+      return data
+    },
+    staleTime: Infinity,
+  })
+}
+
+export function useSizeGrades() {
+  return useQuery({
+    queryKey: ['size_grades'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('size_grades').select('*').order('sort_order')
       if (error) throw error
       return data
     },
