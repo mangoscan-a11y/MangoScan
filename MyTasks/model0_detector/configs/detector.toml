@@ -1,0 +1,46 @@
+# Model 0 (Detector) training configuration.
+#
+# Model 0 finds the mangoes in a raw camera frame and crops them for
+# Models 1-4. Every downstream model assumes a single centred fruit; this
+# is what makes that assumption true.
+
+[paths]
+# Written by tools/prepare_detector_dataset.py. Contains data.yaml.
+dataset_dir = "data/detector_dataset"
+
+[train]
+# YOLO11n over YOLOv8n: same speed class, better mAP, and the ESP32/Pi side
+# cares about the exported ONNX, not the family. Swap to "yolov8n.pt" if a
+# reviewer wants the comparison.
+model = "yolo11n.pt"
+# 640 against a 1280px prepared image. A mango fills a large fraction of the
+# frame; the stem does not, and the stem is the class that will limit mAP.
+imgsz = 640
+epochs = 150
+patience = 30
+batch = 16          # T4-safe at 640. Raise to 32 on an A100.
+device = 0          # "cpu" if no GPU
+workers = 2         # Colab throttles above this
+project = "runs"
+name = "model0_detector"
+
+[augment]
+fliplr = 0.5
+flipud = 0.0        # fruit sits upright on the conveyor
+degrees = 10.0
+scale = 0.5         # the rig's camera distance is fixed, but hand-held
+                    # source images vary wildly - this bridges the two
+mosaic = 1.0
+close_mosaic = 10   # last 10 epochs without mosaic, so the model finishes
+                    # on images that look like deployment frames
+# Hue stays tight. Skin colour is Model 4's entire signal and the detector
+# shares a domain with it; wide hue jitter here teaches habits that hurt
+# when these crops feed the colour model.
+hsv_h = 0.015
+hsv_s = 0.5
+hsv_v = 0.4
+
+[export]
+formats = ["onnx"]
+opset = 12
+simplify = true

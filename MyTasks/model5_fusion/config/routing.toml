@@ -1,0 +1,116 @@
+# MangoScan Model 5 - routing configuration.
+#
+# Everything tunable lives here. No routing constant is hardcoded in Python.
+#
+# SERVO ADDRESSING (proposal - hardware team must confirm):
+#   servo1 selects the group  : green | yellow | diseased | bruised
+#   servo2 selects the slot   : small | medium | large | park
+# Four group positions x three size slots addresses all 8 bins with two
+# servos. Reject bins park servo2 because size is irrelevant there.
+
+schema_version = 1
+engine_version = "1.0.0"
+
+# Minimum confidence for a dimension to be trusted. Routing dimensions
+# below their threshold send the mango to `low_confidence.bin_index`.
+# `variety` is alert-only and never gates routing.
+[thresholds]
+variety = 0.50
+disease = 0.60
+bruise  = 0.60
+color   = 0.60
+size    = 0.60
+
+[disease]
+reject_labels = ["Anthracnose", "Mango Scab"]
+
+[low_confidence]
+# Shares the physical bin with diseased fruit. `reason_code` keeps the two
+# distinguishable in the database. Change this one line if the machine
+# ever gains a manual-review chute.
+bin_index = 7
+
+# Gram ranges are [min_grams, max_grams). These MUST match the
+# `size_grades` table in Supabase.
+[[size_grades]]
+name = "Small"
+min_grams = 0.0
+max_grams = 200.0
+
+[[size_grades]]
+name = "Medium"
+min_grams = 200.0
+max_grams = 350.0
+
+[[size_grades]]
+name = "Large"
+min_grams = 350.0
+max_grams = 100000.0
+
+[[bins]]
+index = 1
+name = "GREEN_SMALL"
+verdict = "passed"
+color = "Green"
+size = "Small"
+servo1_action = "group_green"
+servo2_action = "slot_small"
+
+[[bins]]
+index = 2
+name = "GREEN_MEDIUM"
+verdict = "passed"
+color = "Green"
+size = "Medium"
+servo1_action = "group_green"
+servo2_action = "slot_medium"
+
+[[bins]]
+index = 3
+name = "GREEN_LARGE"
+verdict = "passed"
+color = "Green"
+size = "Large"
+servo1_action = "group_green"
+servo2_action = "slot_large"
+
+[[bins]]
+index = 4
+name = "YELLOW_SMALL"
+verdict = "passed"
+color = "Yellow"
+size = "Small"
+servo1_action = "group_yellow"
+servo2_action = "slot_small"
+
+[[bins]]
+index = 5
+name = "YELLOW_MEDIUM"
+verdict = "passed"
+color = "Yellow"
+size = "Medium"
+servo1_action = "group_yellow"
+servo2_action = "slot_medium"
+
+[[bins]]
+index = 6
+name = "YELLOW_LARGE"
+verdict = "passed"
+color = "Yellow"
+size = "Large"
+servo1_action = "group_yellow"
+servo2_action = "slot_large"
+
+[[bins]]
+index = 7
+name = "REJECT_DISEASED"
+verdict = "rejected"
+servo1_action = "group_diseased"
+servo2_action = "slot_park"
+
+[[bins]]
+index = 8
+name = "REJECT_BRUISED"
+verdict = "rejected"
+servo1_action = "group_bruised"
+servo2_action = "slot_park"
