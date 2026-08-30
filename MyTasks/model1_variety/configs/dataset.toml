@@ -1,0 +1,37 @@
+# Model 1 dataset + training configuration.
+
+[paths]
+# Your raw images, one directory per variety:
+#   raw/Carabao/carabao_001_v1.jpg
+#   raw/Apple_Mango/apple_mango_014_v3.jpg
+raw_dir = "data/raw"
+# Where 01_prepare_dataset.py writes the Ultralytics-layout dataset.
+dataset_dir = "data/dataset"
+
+[split]
+ratios = [0.7, 0.15, 0.15]
+seed = 42
+# Captures the fruit id from a filename, stripping the `_v<n>` view marker.
+# Every view of one physical mango MUST share a fruit id, or the split
+# leaks and your accuracy numbers become fiction.
+fruit_pattern = "^(?P<fruit>.+?)_v\\d+$"
+
+[train]
+model = "yolov8n-cls.pt"
+imgsz = 224
+epochs = 100
+patience = 20
+batch = 64          # drop to 16 on a 4GB local GPU
+device = 0          # "cpu" if no GPU
+project = "runs"
+name = "model1_variety"
+
+[augment]
+fliplr = 0.5
+flipud = 0.0        # mangoes are photographed upright on the rig
+degrees = 15.0
+# Hue jitter stays low on purpose: skin colour carries real variety signal
+# in this domain, and washing it out costs accuracy.
+hsv_h = 0.015
+hsv_s = 0.4
+hsv_v = 0.4

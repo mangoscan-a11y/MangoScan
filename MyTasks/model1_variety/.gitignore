@@ -1,0 +1,7 @@
+data/
+runs/
+*.onnx
+*.tflite
+__pycache__/
+.pytest_cache/
+*.pyc
