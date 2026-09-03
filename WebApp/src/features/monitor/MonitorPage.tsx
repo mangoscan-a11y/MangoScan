@@ -70,22 +70,6 @@ function useLatestScan() {
   })
 }
 
-function useLastLatency() {
-  return useQuery({
-    queryKey: ['last_latency'],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('sorting_logs')
-        .select('latency_ms, actuation_status, logged_at')
-        .order('logged_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      return data
-    },
-    refetchInterval: 15_000,
-  })
-}
-
 interface StatCardProps {
   title: string
   value: string | number
@@ -153,30 +137,15 @@ export default function MonitorPage() {
   const { data: summary, isLoading: summaryLoading } = useTodaySummary()
   const { data: classification, isLoading: classificationLoading } = useTodayClassification()
   const { data: latest, isLoading: latestLoading } = useLatestScan()
-  const { data: latency } = useLastLatency()
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold">Live Monitor</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Today's sorting activity — refreshes every 15 seconds.
-          </p>
-        </div>
-
-        {/* Device status strip */}
-        <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm">
-          <span className="flex h-2 w-2 rounded-full bg-primary animate-pulse" />
-          <span className="text-muted-foreground">ESP32</span>
-          <span className="text-foreground font-medium">
-            {latency ? 'Online' : 'Awaiting data'}
-          </span>
-          {latency?.latency_ms && (
-            <span className="font-mono text-xs text-muted-foreground">{latency.latency_ms} ms</span>
-          )}
-        </div>
+      <div>
+        <h1 className="text-xl font-bold">Live Monitor</h1>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Today's sorting activity — refreshes every 15 seconds.
+        </p>
       </div>
 
       {/* Today's totals */}

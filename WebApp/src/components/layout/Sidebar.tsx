@@ -51,7 +51,7 @@ export function Sidebar() {
 				<img
 					src={homeLogo}
 					alt='MangoFacture'
-					className='h-12 w-auto object-contain invert [mix-blend-mode:screen]'
+					className='h-12 w-auto object-contain dark:invert dark:[mix-blend-mode:screen]'
 				/>
 				<span className='font-semibold text-sm'>MangoScan</span>
 			</div>
