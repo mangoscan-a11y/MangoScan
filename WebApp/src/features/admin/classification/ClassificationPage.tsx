@@ -1,13 +1,23 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import type { MangoVariety, Disease, RipenessLevel, SizeGrade, SeverityLevel } from '@/lib/database.types'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
-import { Pencil, Plus } from 'lucide-react'
+import { Pencil } from 'lucide-react'
 
 function useVarieties() {
   return useQuery({
@@ -63,22 +73,13 @@ const severityColor: Record<SeverityLevel, 'default' | 'secondary' | 'warning' |
 interface TabHeaderProps {
   title: string
   description: string
-  addLabel: string
 }
 
-function TabHeader({ title, description, addLabel }: TabHeaderProps) {
+function TabHeader({ title, description }: TabHeaderProps) {
   return (
-    <div className="flex items-center justify-between">
-      <div>
-        <h2 className="text-base font-semibold">{title}</h2>
-        <p className="text-sm text-muted-foreground mt-0.5">{description}</p>
-      </div>
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-muted-foreground italic">Not available for now</span>
-        <Button size="sm" className="gap-1.5" disabled>
-          <Plus className="h-4 w-4" /> {addLabel}
-        </Button>
-      </div>
+    <div>
+      <h2 className="text-base font-semibold">{title}</h2>
+      <p className="text-sm text-muted-foreground mt-0.5">{description}</p>
     </div>
   )
 }
@@ -99,15 +100,80 @@ function SkeletonRows({ columns }: { columns: number }) {
   )
 }
 
+function EditPriceDialog({ variety, onClose }: { variety: MangoVariety; onClose: () => void }) {
+  const [price, setPrice] = useState(variety.market_price != null ? String(variety.market_price) : '')
+  const queryClient = useQueryClient()
+  const { toast } = useToast()
+
+  const mutation = useMutation({
+    mutationFn: async (newPrice: number) => {
+      const { error } = await supabase
+        .from('mango_varieties')
+        .update({ market_price: newPrice })
+        .eq('variety_id', variety.variety_id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mango_varieties'] })
+      toast({ title: 'Market price updated', description: `${variety.variety_name} is now ₱${Number(price).toFixed(2)}/kg.` })
+      onClose()
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Failed to update price', description: error.message, variant: 'destructive' })
+    },
+  })
+
+  const parsed = Number(price)
+  const isValid = price.trim() !== '' && Number.isFinite(parsed) && parsed >= 0
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Edit market price</DialogTitle>
+        </DialogHeader>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (isValid) mutation.mutate(parsed)
+          }}
+          className="space-y-4"
+        >
+          <div className="space-y-1.5">
+            <Label htmlFor="market-price">{variety.variety_name} (₱/kg)</Label>
+            <Input
+              id="market-price"
+              type="number"
+              min="0"
+              step="0.01"
+              autoFocus
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose} disabled={mutation.isPending}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={!isValid || mutation.isPending}>
+              {mutation.isPending ? 'Saving…' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function VarietiesTab() {
   const { data: varieties, isLoading } = useVarieties()
+  const [editing, setEditing] = useState<MangoVariety | null>(null)
 
   return (
     <div className="space-y-4">
       <TabHeader
         title="Mango Varieties"
         description="Variety classes mangoes are manually pre-sorted into before entering the machine."
-        addLabel="Add Variety"
       />
       <Card>
         <div className="overflow-x-auto">
@@ -132,7 +198,7 @@ function VarietiesTab() {
                       {v.market_price != null ? `₱${v.market_price.toFixed(2)}/kg` : '—'}
                     </td>
                     <td className="px-4 py-3">
-                      <Button variant="ghost" size="icon" className="h-7 w-7" disabled>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditing(v)}>
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
                     </td>
@@ -143,6 +209,7 @@ function VarietiesTab() {
           </table>
         </div>
       </Card>
+      {editing && <EditPriceDialog variety={editing} onClose={() => setEditing(null)} />}
     </div>
   )
 }
@@ -155,7 +222,6 @@ function DiseasesTab() {
       <TabHeader
         title="Disease Classes"
         description="Disease classes the YOLOv8 model is trained to detect."
-        addLabel="Add Disease"
       />
       <Card>
         <div className="overflow-x-auto">
@@ -165,12 +231,11 @@ function DiseasesTab() {
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">Name</th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">Description</th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">Severity</th>
-                <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
-                <SkeletonRows columns={4} />
+                <SkeletonRows columns={3} />
               ) : (
                 diseases?.map((d) => (
                   <tr key={d.disease_id} className="border-b border-border/50">
@@ -178,11 +243,6 @@ function DiseasesTab() {
                     <td className="px-4 py-3 text-muted-foreground max-w-xs">{d.description ?? '—'}</td>
                     <td className="px-4 py-3">
                       <Badge variant={severityColor[d.severity_level]} className="capitalize">{d.severity_level}</Badge>
-                    </td>
-                    <td className="px-4 py-3">
-                      <Button variant="ghost" size="icon" className="h-7 w-7" disabled>
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
                     </td>
                   </tr>
                 ))
@@ -203,7 +263,6 @@ function RipenessTab() {
       <TabHeader
         title="Ripeness Levels (Color)"
         description="Color/ripeness stages the YOLOv8 model reports for each mango."
-        addLabel="Add Level"
       />
       <Card>
         <div className="overflow-x-auto">
@@ -212,22 +271,16 @@ function RipenessTab() {
               <tr className="border-b border-border">
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">Name</th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">Description</th>
-                <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
-                <SkeletonRows columns={3} />
+                <SkeletonRows columns={2} />
               ) : (
                 levels?.map((r) => (
                   <tr key={r.ripeness_id} className="border-b border-border/50">
                     <td className="px-4 py-3 font-medium">{r.ripeness_name}</td>
                     <td className="px-4 py-3 text-muted-foreground max-w-xs">{r.description ?? '—'}</td>
-                    <td className="px-4 py-3">
-                      <Button variant="ghost" size="icon" className="h-7 w-7" disabled>
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                    </td>
                   </tr>
                 ))
               )}
@@ -247,7 +300,6 @@ function SizeGradesTab() {
       <TabHeader
         title="Size Grades"
         description="Size classes the YOLOv8 model reports for each mango, graded by weight."
-        addLabel="Add Grade"
       />
       <Card>
         <div className="overflow-x-auto">
@@ -257,12 +309,11 @@ function SizeGradesTab() {
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">Name</th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">Description</th>
                 <th className="px-4 py-3 text-right font-medium text-muted-foreground">Weight Range</th>
-                <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
-                <SkeletonRows columns={4} />
+                <SkeletonRows columns={3} />
               ) : (
                 grades?.map((s) => (
                   <tr key={s.size_id} className="border-b border-border/50">
@@ -270,11 +321,6 @@ function SizeGradesTab() {
                     <td className="px-4 py-3 text-muted-foreground max-w-xs truncate">{s.description ?? '—'}</td>
                     <td className="px-4 py-3 text-right font-mono">
                       {s.min_grams != null && s.max_grams != null ? `${s.min_grams}–${s.max_grams} g` : '—'}
-                    </td>
-                    <td className="px-4 py-3">
-                      <Button variant="ghost" size="icon" className="h-7 w-7" disabled>
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
                     </td>
                   </tr>
                 ))
