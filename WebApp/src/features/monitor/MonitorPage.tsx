@@ -5,8 +5,13 @@ import { DIMENSIONS, pivotDailyClassification } from '@/lib/classification'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
 import { CheckCircle2, XCircle, Layers, Clock, Activity } from 'lucide-react'
-import { format } from 'date-fns'
+import { format, formatDistanceToNow } from 'date-fns'
+
+// No logs within this window reads as offline — sorting_logs only records
+// actual actuations, so this is the best available liveness signal (no heartbeat table).
+const DEVICE_ONLINE_WINDOW_MS = 5 * 60 * 1000
 
 function todayInManila() {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date())
@@ -114,6 +119,36 @@ function StatCard({ title, value, icon: Icon, iconClass, loading }: StatCardProp
   )
 }
 
+function DeviceStatusBadge({
+  latency,
+}: {
+  latency: { latency_ms: number | null; actuation_status: string; logged_at: string } | null | undefined
+}) {
+  const isOnline = !!latency && Date.now() - new Date(latency.logged_at).getTime() < DEVICE_ONLINE_WINDOW_MS
+
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm">
+      <span
+        className={cn(
+          'flex h-2 w-2 rounded-full',
+          isOnline ? 'bg-success animate-pulse' : latency ? 'bg-destructive' : 'bg-muted-foreground/40',
+        )}
+      />
+      <span className="text-muted-foreground">ESP32</span>
+      <span className="text-foreground font-medium">
+        {!latency ? 'No Data' : isOnline ? 'Online' : 'Offline'}
+      </span>
+      {latency && (
+        <span className="font-mono text-xs text-muted-foreground">
+          {isOnline && latency.latency_ms != null
+            ? `${latency.latency_ms} ms`
+            : `last seen ${formatDistanceToNow(new Date(latency.logged_at), { addSuffix: true })}`}
+        </span>
+      )}
+    </div>
+  )
+}
+
 function DimensionCard({
   title,
   breakdown,
@@ -166,17 +201,7 @@ export default function MonitorPage() {
           </p>
         </div>
 
-        {/* Device status strip */}
-        <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm">
-          <span className="flex h-2 w-2 rounded-full bg-primary animate-pulse" />
-          <span className="text-muted-foreground">ESP32</span>
-          <span className="text-foreground font-medium">
-            {latency ? 'Online' : 'Awaiting data'}
-          </span>
-          {latency?.latency_ms && (
-            <span className="font-mono text-xs text-muted-foreground">{latency.latency_ms} ms</span>
-          )}
-        </div>
+        <DeviceStatusBadge latency={latency} />
       </div>
 
       {/* Today's totals */}

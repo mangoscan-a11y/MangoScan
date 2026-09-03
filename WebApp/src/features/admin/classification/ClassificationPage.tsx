@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
-import { Pencil, Plus } from 'lucide-react'
+import { Pencil } from 'lucide-react'
 
 function useVarieties() {
   return useQuery({
@@ -63,22 +63,13 @@ const severityColor: Record<SeverityLevel, 'default' | 'secondary' | 'warning' |
 interface TabHeaderProps {
   title: string
   description: string
-  addLabel: string
 }
 
-function TabHeader({ title, description, addLabel }: TabHeaderProps) {
+function TabHeader({ title, description }: TabHeaderProps) {
   return (
-    <div className="flex items-center justify-between">
-      <div>
-        <h2 className="text-base font-semibold">{title}</h2>
-        <p className="text-sm text-muted-foreground mt-0.5">{description}</p>
-      </div>
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-muted-foreground italic">Not available for now</span>
-        <Button size="sm" className="gap-1.5" disabled>
-          <Plus className="h-4 w-4" /> {addLabel}
-        </Button>
-      </div>
+    <div>
+      <h2 className="text-base font-semibold">{title}</h2>
+      <p className="text-sm text-muted-foreground mt-0.5">{description}</p>
     </div>
   )
 }
@@ -107,7 +98,6 @@ function VarietiesTab() {
       <TabHeader
         title="Mango Varieties"
         description="Variety classes mangoes are manually pre-sorted into before entering the machine."
-        addLabel="Add Variety"
       />
       <Card>
         <div className="overflow-x-auto">
@@ -155,7 +145,6 @@ function DiseasesTab() {
       <TabHeader
         title="Disease Classes"
         description="Disease classes the YOLOv8 model is trained to detect."
-        addLabel="Add Disease"
       />
       <Card>
         <div className="overflow-x-auto">
@@ -203,7 +192,6 @@ function RipenessTab() {
       <TabHeader
         title="Ripeness Levels (Color)"
         description="Color/ripeness stages the YOLOv8 model reports for each mango."
-        addLabel="Add Level"
       />
       <Card>
         <div className="overflow-x-auto">
@@ -247,7 +235,6 @@ function SizeGradesTab() {
       <TabHeader
         title="Size Grades"
         description="Size classes the YOLOv8 model reports for each mango, graded by weight."
-        addLabel="Add Grade"
       />
       <Card>
         <div className="overflow-x-auto">
