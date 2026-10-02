@@ -144,7 +144,7 @@ export default function MonitorPage() {
       <div>
         <h1 className="text-xl font-bold">Live Monitor</h1>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Today's sorting activity — refreshes every 15 seconds.
+          {/* Today's sorting activity. Refreshes every 5 seconds. */}
         </p>
       </div>
 
