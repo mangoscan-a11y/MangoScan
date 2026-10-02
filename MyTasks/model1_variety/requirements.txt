@@ -1,9 +1,0 @@
-# Colab / training-host only. Do NOT install these locally on Python 3.14 -
-# there are no wheels. The `mango_variety` package deliberately needs none
-# of this.
-ultralytics>=8.3.0
-torch>=2.2.0
-torchvision>=0.17.0
-onnx>=1.16.0
-onnxruntime>=1.18.0
-matplotlib>=3.8.0
