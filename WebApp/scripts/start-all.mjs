@@ -37,6 +37,17 @@ function stopAll(code) {
 }
 
 function findPython() {
+  // MODELS_PYTHON lets the models service run under a Python that has the ML packages
+  // (PyTorch, Ultralytics) installed, for example a virtual environment's python.exe.
+  const chosen = process.env.MODELS_PYTHON
+  if (chosen) {
+    const probe = spawnSync(chosen, ['--version'], { encoding: 'utf8' })
+    if (probe.status !== 0) {
+      console.error('MODELS_PYTHON is set to "' + chosen + '" but that program cannot be run.')
+      process.exit(1)
+    }
+    return [chosen]
+  }
   for (const cmd of [['python'], ['py', '-3']]) {
     const probe = spawnSync(cmd[0], [...cmd.slice(1), '--version'], { encoding: 'utf8' })
     if (probe.status === 0) return cmd

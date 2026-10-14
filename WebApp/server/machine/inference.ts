@@ -102,7 +102,16 @@ export class InferenceClient {
       }
       throw new Error('inference service unreachable: ' + (err instanceof Error ? err.message : String(err)))
     }
-    if (!res.ok) throw new Error('inference service returned HTTP ' + res.status)
+    if (!res.ok) {
+      let detail = ''
+      try {
+        const body = (await res.json()) as { error?: unknown }
+        if (typeof body.error === 'string') detail = ': ' + body.error.slice(0, 300)
+      } catch {
+        // not JSON, the status alone will do
+      }
+      throw new Error('inference service returned HTTP ' + res.status + detail)
+    }
     const text = await res.text()
     if (text.length > MAX_RESPONSE_BYTES) throw new Error('inference service response too large')
     return text

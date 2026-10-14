@@ -71,6 +71,15 @@ describe('InferenceClient', () => {
     await expect(new InferenceClient(url, 1000).classify(req)).rejects.toThrow(/500/)
   })
 
+  it('passes the service explanation of a rejection into the error, so the cause is visible in the log', async () => {
+    const url = await serve((_q, res) => {
+      res.statusCode = 422
+      res.setHeader('content-type', 'application/json')
+      res.end(JSON.stringify({ error: "model output rejected: color: unknown label 'Overripe'" }))
+    })
+    await expect(new InferenceClient(url, 1000).classify(req)).rejects.toThrow(/422.*Overripe/)
+  })
+
   it('throws when the service answers too slowly', async () => {
     const url = await serve(() => {})
     await expect(new InferenceClient(url, 100).classify(req)).rejects.toThrow(/timed out/i)

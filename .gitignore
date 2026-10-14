@@ -27,6 +27,7 @@ dist-ssr
 /MyTasks
 .env
 .claude
+/ML
 
 # Local machine data (captured images, firmware build output)
 WebApp/storage
