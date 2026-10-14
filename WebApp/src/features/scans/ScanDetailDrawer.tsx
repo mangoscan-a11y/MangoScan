@@ -6,17 +6,11 @@ import { useScanDetail } from './hooks'
 import type { ScanSessionWithRelations } from '@/lib/database.types'
 import { format } from 'date-fns'
 import { CheckCircle2, XCircle, Clock, Cpu } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { imageUrl } from '@/lib/api'
 
 interface Props {
   scan: ScanSessionWithRelations | null
   onClose: () => void
-}
-
-function getImageUrl(path: string) {
-  if (path.startsWith('http')) return path
-  const { data } = supabase.storage.from('scan-images').getPublicUrl(path)
-  return data.publicUrl
 }
 
 export function ScanDetailDrawer({ scan, onClose }: Props) {
@@ -102,7 +96,7 @@ export function ScanDetailDrawer({ scan, onClose }: Props) {
 
             {/* Images */}
             <div>
-              <h3 className="text-sm font-semibold mb-3">Captured Images (5 angles)</h3>
+              <h3 className="text-sm font-semibold mb-3">Captured Images</h3>
               {isLoading ? (
                 <div className="grid grid-cols-5 gap-2">
                   {Array.from({ length: 5 }).map((_, i) => (
@@ -115,7 +109,7 @@ export function ScanDetailDrawer({ scan, onClose }: Props) {
                     <div key={img.image_id} className="space-y-1">
                       <div className="aspect-square rounded-lg border border-border overflow-hidden bg-muted">
                         <img
-                          src={getImageUrl(img.image_path)}
+                          src={imageUrl(img.image_path)}
                           alt={`Angle ${img.angle_sequence}`}
                           className="w-full h-full object-cover"
                           onError={(e) => {
@@ -162,6 +156,37 @@ export function ScanDetailDrawer({ scan, onClose }: Props) {
 
             <Separator />
 
+            {/* Routing decision */}
+            <div>
+              <h3 className="text-sm font-semibold mb-3">Routing Decision</h3>
+              <div className="space-y-2 text-sm">
+                <p>
+                  <span className="text-muted-foreground">Reason: </span>
+                  <span className="font-mono">{scan.reason_code ?? '—'}</span>
+                </p>
+                {scan.alerts.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {scan.alerts.map((a) => (
+                      <Badge key={a} variant="warning">{a}</Badge>
+                    ))}
+                  </div>
+                )}
+                {detail?.decision_trace?.length ? (
+                  <ol className="space-y-1 rounded-lg border border-border bg-muted/30 p-3">
+                    {detail.decision_trace.map((step, i) => (
+                      <li key={i} className="flex gap-2">
+                        <span className="w-28 shrink-0 font-mono text-xs text-muted-foreground">{step.step}</span>
+                        <span className="w-16 shrink-0 font-mono text-xs">{step.result}</span>
+                        <span className="text-xs text-muted-foreground">{step.detail}</span>
+                      </li>
+                    ))}
+                  </ol>
+                ) : null}
+              </div>
+            </div>
+
+            <Separator />
+
             {/* Sorting log */}
             <div>
               <h3 className="text-sm font-semibold mb-3">Sorting Actuation Log</h3>
@@ -170,15 +195,15 @@ export function ScanDetailDrawer({ scan, onClose }: Props) {
               ) : detail?.log ? (
                 <div className="grid grid-cols-2 gap-3 text-sm rounded-lg border border-border bg-muted/30 p-3">
                   <div>
-                    <p className="text-muted-foreground">Servo 1 (Reject/Pass)</p>
+                    <p className="text-muted-foreground">Servo 1 (Group)</p>
                     <p className="font-mono font-medium">{detail.log.servo1_action ?? '—'}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Servo 2 (Variety)</p>
+                    <p className="text-muted-foreground">Servo 2 (Slot)</p>
                     <p className="font-mono font-medium">{detail.log.servo2_action ?? '—'}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Target Lane</p>
+                    <p className="text-muted-foreground">Target Bin</p>
                     <p className="font-medium">{detail.log.gate_target ?? '—'}</p>
                   </div>
                   <div>
@@ -187,7 +212,7 @@ export function ScanDetailDrawer({ scan, onClose }: Props) {
                   </div>
                   <div>
                     <p className="text-muted-foreground">Status</p>
-                    <Badge variant={detail.log.actuation_status === 'success' ? 'success' : 'destructive'} className="capitalize">
+                    <Badge variant={detail.log.actuation_status === 'success' ? 'success' : detail.log.actuation_status === 'pending' ? 'secondary' : 'destructive'} className="capitalize">
                       {detail.log.actuation_status}
                     </Badge>
                   </div>

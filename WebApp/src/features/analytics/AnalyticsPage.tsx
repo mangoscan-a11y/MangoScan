@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { supabase } from '@/lib/supabase'
-import type { VDailySummary, VDailyClassification, ClassificationDimension } from '@/lib/database.types'
+import { apiGet } from '@/lib/api'
+import type { ExportRow, VDailySummary, VDailyClassification, ClassificationDimension } from '@/lib/database.types'
 import { DIMENSIONS, pivotDailyClassification, colorForLabel, toCsvRow } from '@/lib/classification'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -36,33 +36,14 @@ const COLORS = {
 function useDailySummary(dateFrom: string, dateTo: string) {
   return useQuery({
     queryKey: ['v_daily_summary', dateFrom, dateTo],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('v_daily_summary')
-        .select('*')
-        .gte('summary_date', dateFrom)
-        .lte('summary_date', dateTo)
-        .order('summary_date')
-
-      if (error) throw error
-      return data as VDailySummary[]
-    },
+    queryFn: () => apiGet<VDailySummary[]>('/api/summary/daily', { from: dateFrom, to: dateTo }),
   })
 }
 
 function useDailyClassification(dateFrom: string, dateTo: string) {
   return useQuery({
     queryKey: ['v_daily_classification', dateFrom, dateTo],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('v_daily_classification')
-        .select('*')
-        .gte('summary_date', dateFrom)
-        .lte('summary_date', dateTo)
-
-      if (error) throw error
-      return data as VDailyClassification[]
-    },
+    queryFn: () => apiGet<VDailyClassification[]>('/api/summary/classification', { from: dateFrom, to: dateTo }),
   })
 }
 
@@ -93,72 +74,40 @@ function triggerDownload(csv: string, filename: string) {
 }
 
 async function downloadDetailedCsv(dateFrom: string, dateTo: string) {
-  const { data, error } = await supabase
-    .from('scan_sessions')
-    .select(`
-      scan_id, scan_datetime, quality_verdict, confidence_score, processing_time, bin_assigned,
-      is_bruised, bruise_confidence,
-      mango_varieties ( variety_name ),
-      diseases ( disease_name, severity_level ),
-      ripeness_levels ( ripeness_name ),
-      size_grades ( size_name ),
-      profiles ( full_name, username ),
-      sorting_logs ( servo1_action, servo2_action, gate_target, actuation_status, latency_ms )
-    `)
-    .gte('scan_datetime', dateFrom)
-    .lte('scan_datetime', dateTo + 'T23:59:59Z')
-    .order('scan_datetime', { ascending: false })
-
-  if (error) throw error
-
-  type Row = {
-    scan_id: number
-    scan_datetime: string
-    quality_verdict: string
-    confidence_score: number | null
-    processing_time: number | null
-    bin_assigned: string | null
-    is_bruised: boolean | null
-    bruise_confidence: number | null
-    mango_varieties: { variety_name: string } | null
-    diseases: { disease_name: string; severity_level: string } | null
-    ripeness_levels: { ripeness_name: string } | null
-    size_grades: { size_name: string } | null
-    profiles: { full_name: string; username: string } | null
-    sorting_logs: { servo1_action: string | null; servo2_action: string | null; gate_target: string | null; actuation_status: string; latency_ms: number | null } | null
-  }
+  const rows = await apiGet<ExportRow[]>('/api/export/scans', { from: dateFrom, to: dateTo })
 
   const header = toCsvRow([
     'Scan ID', 'Date/Time', 'Variety', 'Disease', 'Severity',
     'Bruised', 'Color', 'Size',
-    'Verdict', 'Confidence (%)', 'Processing (s)', 'Bin Assigned',
-    'Operator', 'Servo 1', 'Servo 2', 'Gate Target', 'Actuation', 'Latency (ms)',
+    'Verdict', 'Confidence (%)', 'Processing (s)', 'Bin Assigned', 'Reason', 'Alerts',
+    'Servo 1', 'Servo 2', 'Gate Target', 'Actuation', 'Latency (ms)',
   ])
 
-  const rows = (data as unknown as Row[]).map((r) =>
+  const body = rows.map((r) =>
     toCsvRow([
       r.scan_id,
       format(new Date(r.scan_datetime), 'yyyy-MM-dd HH:mm:ss'),
-      r.mango_varieties?.variety_name ?? '',
-      r.diseases?.disease_name ?? '',
-      r.diseases?.severity_level ?? '',
+      r.variety ?? '',
+      r.disease ?? '',
+      r.severity ?? '',
       r.is_bruised == null ? '' : r.is_bruised ? 'Bruised' : 'Not Bruised',
-      r.ripeness_levels?.ripeness_name ?? '',
-      r.size_grades?.size_name ?? '',
+      r.color ?? '',
+      r.size ?? '',
       r.quality_verdict,
       r.confidence_score?.toFixed(2) ?? '',
       r.processing_time?.toFixed(2) ?? '',
       r.bin_assigned ?? '',
-      r.profiles?.full_name ?? 'System',
-      r.sorting_logs?.servo1_action ?? '',
-      r.sorting_logs?.servo2_action ?? '',
-      r.sorting_logs?.gate_target ?? '',
-      r.sorting_logs?.actuation_status ?? '',
-      r.sorting_logs?.latency_ms ?? '',
+      r.reason_code ?? '',
+      r.alerts.join(' '),
+      r.servo1_action ?? '',
+      r.servo2_action ?? '',
+      r.gate_target ?? '',
+      r.actuation_status ?? '',
+      r.latency_ms ?? '',
     ])
   )
 
-  const csv = [header, ...rows].join('\n')
+  const csv = [header, ...body].join('\n')
   triggerDownload(csv, `mangoscan-scans-${format(new Date(), 'yyyy-MM-dd')}.csv`)
 }
 

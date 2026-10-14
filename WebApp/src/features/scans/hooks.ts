@@ -1,6 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
-import { supabase } from '@/lib/supabase'
-import type { ScanSessionWithRelations, ScanImage, DetectionResult, SortingLog } from '@/lib/database.types'
+import { apiGet } from '@/lib/api'
+import type {
+  Disease,
+  MangoVariety,
+  RipenessLevel,
+  ScanDetail,
+  ScanSessionWithRelations,
+  SizeGrade,
+} from '@/lib/database.types'
 
 export interface ScanFilters {
   verdict?: string
@@ -18,37 +25,19 @@ export interface ScanFilters {
 export function useScanSessions(filters: ScanFilters) {
   return useQuery({
     queryKey: ['scan_sessions', filters],
-    queryFn: async () => {
-      const from = (filters.page - 1) * filters.pageSize
-      const to = from + filters.pageSize - 1
-
-      let query = supabase
-        .from('scan_sessions')
-        .select(`
-          *,
-          mango_varieties ( variety_id, variety_name ),
-          diseases ( disease_id, disease_name, severity_level ),
-          ripeness_levels ( ripeness_id, ripeness_name ),
-          size_grades ( size_id, size_name ),
-          profiles ( full_name, username )
-        `, { count: 'exact' })
-        .order('scan_datetime', { ascending: false })
-        .range(from, to)
-
-      if (filters.verdict) query = query.eq('quality_verdict', filters.verdict)
-      if (filters.varietyId) query = query.eq('variety_id', filters.varietyId)
-      if (filters.diseaseId) query = query.eq('disease_id', filters.diseaseId)
-      if (filters.ripenessId) query = query.eq('ripeness_id', filters.ripenessId)
-      if (filters.sizeId) query = query.eq('size_id', filters.sizeId)
-      if (filters.bruised) query = query.eq('is_bruised', filters.bruised === 'true')
-      if (filters.dateFrom) query = query.gte('scan_datetime', filters.dateFrom)
-      if (filters.dateTo) query = query.lte('scan_datetime', filters.dateTo + 'T23:59:59Z')
-
-      const { data, error, count } = await query
-      if (error) throw error
-
-      return { data: data as ScanSessionWithRelations[], count: count ?? 0 }
-    },
+    queryFn: () =>
+      apiGet<{ data: ScanSessionWithRelations[]; count: number }>('/api/scans', {
+        verdict: filters.verdict,
+        varietyId: filters.varietyId,
+        diseaseId: filters.diseaseId,
+        ripenessId: filters.ripenessId,
+        sizeId: filters.sizeId,
+        bruised: filters.bruised,
+        dateFrom: filters.dateFrom,
+        dateTo: filters.dateTo,
+        page: filters.page,
+        pageSize: filters.pageSize,
+      }),
   })
 }
 
@@ -56,47 +45,15 @@ export function useScanDetail(scanId: number | null) {
   return useQuery({
     queryKey: ['scan_detail', scanId],
     enabled: scanId !== null,
-    queryFn: async () => {
-      if (!scanId) return null
-
-      const [imagesRes, detectionsRes, logsRes] = await Promise.all([
-        supabase
-          .from('scan_images')
-          .select('*')
-          .eq('scan_id', scanId)
-          .order('angle_sequence'),
-        supabase
-          .from('detection_result')
-          .select('*')
-          .eq('scan_id', scanId)
-          .order('confidence', { ascending: false }),
-        supabase
-          .from('sorting_logs')
-          .select('*')
-          .eq('scan_id', scanId)
-          .single(),
-      ])
-
-      if (imagesRes.error) throw imagesRes.error
-      if (detectionsRes.error) throw detectionsRes.error
-
-      return {
-        images: imagesRes.data as ScanImage[],
-        detections: detectionsRes.data as DetectionResult[],
-        log: logsRes.data as SortingLog | null,
-      }
-    },
+    queryFn: () => apiGet<ScanDetail>('/api/scans/' + scanId + '/detail'),
   })
 }
 
+// Reference tables change about never, so they are fetched once per session.
 export function useMangoVarieties() {
   return useQuery({
     queryKey: ['mango_varieties'],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('mango_varieties').select('*').order('variety_name')
-      if (error) throw error
-      return data
-    },
+    queryFn: () => apiGet<MangoVariety[]>('/api/reference/varieties'),
     staleTime: Infinity,
   })
 }
@@ -104,11 +61,7 @@ export function useMangoVarieties() {
 export function useDiseases() {
   return useQuery({
     queryKey: ['diseases'],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('diseases').select('*').order('disease_name')
-      if (error) throw error
-      return data
-    },
+    queryFn: () => apiGet<Disease[]>('/api/reference/diseases'),
     staleTime: Infinity,
   })
 }
@@ -116,11 +69,7 @@ export function useDiseases() {
 export function useRipenessLevels() {
   return useQuery({
     queryKey: ['ripeness_levels'],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('ripeness_levels').select('*').order('sort_order')
-      if (error) throw error
-      return data
-    },
+    queryFn: () => apiGet<RipenessLevel[]>('/api/reference/ripeness'),
     staleTime: Infinity,
   })
 }
@@ -128,11 +77,7 @@ export function useRipenessLevels() {
 export function useSizeGrades() {
   return useQuery({
     queryKey: ['size_grades'],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('size_grades').select('*').order('sort_order')
-      if (error) throw error
-      return data
-    },
+    queryFn: () => apiGet<SizeGrade[]>('/api/reference/sizes'),
     staleTime: Infinity,
   })
 }

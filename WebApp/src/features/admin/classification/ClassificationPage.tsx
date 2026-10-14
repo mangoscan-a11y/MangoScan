@@ -1,7 +1,13 @@
 import { useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { supabase } from '@/lib/supabase'
-import type { MangoVariety, Disease, RipenessLevel, SizeGrade, SeverityLevel } from '@/lib/database.types'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { apiSend } from '@/lib/api'
+import {
+  useMangoVarieties as useVarieties,
+  useDiseases,
+  useRipenessLevels,
+  useSizeGrades,
+} from '@/features/scans/hooks'
+import type { MangoVariety, SeverityLevel } from '@/lib/database.types'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -18,50 +24,6 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 import { Pencil } from 'lucide-react'
-
-function useVarieties() {
-  return useQuery({
-    queryKey: ['mango_varieties'],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('mango_varieties').select('*').order('variety_name')
-      if (error) throw error
-      return data as MangoVariety[]
-    },
-  })
-}
-
-function useDiseases() {
-  return useQuery({
-    queryKey: ['diseases'],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('diseases').select('*').order('disease_name')
-      if (error) throw error
-      return data as Disease[]
-    },
-  })
-}
-
-function useRipenessLevels() {
-  return useQuery({
-    queryKey: ['ripeness_levels'],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('ripeness_levels').select('*').order('sort_order')
-      if (error) throw error
-      return data as RipenessLevel[]
-    },
-  })
-}
-
-function useSizeGrades() {
-  return useQuery({
-    queryKey: ['size_grades'],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('size_grades').select('*').order('sort_order')
-      if (error) throw error
-      return data as SizeGrade[]
-    },
-  })
-}
 
 const severityColor: Record<SeverityLevel, 'default' | 'secondary' | 'warning' | 'destructive' | 'success'> = {
   none: 'success',
@@ -106,13 +68,8 @@ function EditPriceDialog({ variety, onClose }: { variety: MangoVariety; onClose:
   const { toast } = useToast()
 
   const mutation = useMutation({
-    mutationFn: async (newPrice: number) => {
-      const { error } = await supabase
-        .from('mango_varieties')
-        .update({ market_price: newPrice })
-        .eq('variety_id', variety.variety_id)
-      if (error) throw error
-    },
+    mutationFn: (newPrice: number) =>
+      apiSend('PATCH', '/api/reference/varieties/' + variety.variety_id, { market_price: newPrice }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['mango_varieties'] })
       toast({ title: 'Market price updated', description: `${variety.variety_name} is now ₱${Number(price).toFixed(2)}/kg.` })
@@ -320,7 +277,7 @@ function SizeGradesTab() {
                     <td className="px-4 py-3 font-medium">{s.size_name}</td>
                     <td className="px-4 py-3 text-muted-foreground max-w-xs truncate">{s.description ?? '—'}</td>
                     <td className="px-4 py-3 text-right font-mono">
-                      {s.min_grams != null && s.max_grams != null ? `${s.min_grams}–${s.max_grams} g` : '—'}
+                      {s.min_grams == null ? '—' : s.max_grams == null ? `${s.min_grams}+ g` : `${s.min_grams}–${s.max_grams} g`}
                     </td>
                   </tr>
                 ))
