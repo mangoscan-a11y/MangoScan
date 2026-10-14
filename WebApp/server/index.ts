@@ -6,6 +6,7 @@ import { loadConfig } from './config.ts'
 import { connectDb, ensureIndexes, seedReference, syncScanCounter } from './db.ts'
 import { EventHub } from './events.ts'
 import { BinManager } from './machine/bin-manager.ts'
+import { HardwareCheck } from './machine/hardware-check.ts'
 import { InferenceClient } from './machine/inference.ts'
 import { Orchestrator } from './machine/orchestrator.ts'
 import { RefCache } from './machine/ref-cache.ts'
@@ -72,6 +73,7 @@ if (serial.kind === 'mock') {
 const devices = new DeviceManager(source, { log: (m) => log(m), maxFailures: serial.kind === 'auto' ? 5 : Infinity })
 const inference = new InferenceClient(config.inferenceUrl, config.inferenceTimeoutMs)
 const orchestrator = new Orchestrator({ db, refs, bins, hub, devices, inference, storageDir: config.storageDir, log })
+const check = new HardwareCheck({ devices, queue: orchestrator })
 wireDevices({ devices, bins, hub, db, orchestrator, log })
 
 const app = createApp({
@@ -82,6 +84,7 @@ const app = createApp({
   hub,
   devices,
   orchestrator,
+  check,
   inference,
   mode: mock ? 'mock' : 'serial',
   mock,

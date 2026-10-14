@@ -32,6 +32,9 @@ export const priceBody = z.object({ market_price: z.number().min(0).max(100_000)
 
 export const settingsBody = z.object({ declared_variety: z.string().min(1).max(64).nullable() }).strict()
 
+// Same shape a board may use for its id in its hello message.
+export const cameraParam = z.object({ camera: z.string().regex(/^[A-Za-z0-9._-]{1,32}$/) }).strict()
+
 export const mockBinBody = z.object({ bin: z.number().int().min(1).max(8), full: z.boolean() }).strict()
 
 export const ingestBody = resultSchema.extend({

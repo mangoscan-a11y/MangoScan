@@ -1,6 +1,20 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import { looksLikeEspAdapter } from './serial-source.ts'
+import { autoBaud, looksLikeEspAdapter } from './serial-source.ts'
+
+describe('autoBaud', () => {
+  const mode = { baud: 921600, adapterBauds: { '10c4': 115200 } }
+
+  it('uses the adapter override, whatever the case of the vendor id', () => {
+    expect(autoBaud({ vendorId: '10C4' }, mode)).toBe(115200)
+    expect(autoBaud({ vendorId: '10c4' }, mode)).toBe(115200)
+  })
+
+  it('falls back to the default for other adapters and for ports with no ids', () => {
+    expect(autoBaud({ vendorId: '1a86' }, mode)).toBe(921600)
+    expect(autoBaud({}, mode)).toBe(921600)
+  })
+})
 
 describe('looksLikeEspAdapter', () => {
   it.each([

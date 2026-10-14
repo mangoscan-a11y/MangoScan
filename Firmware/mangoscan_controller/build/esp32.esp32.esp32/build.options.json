@@ -1,0 +1,9 @@
+{
+  "additionalFiles": "..\\..",
+  "compiler.optimization_flags": "-Os",
+  "customBuildProperties": "",
+  "fqbn": "esp32:esp32:esp32:UploadSpeed=115200",
+  "hardwareFolders": "C:\\MangoScan\\arduino\\data\\packages\\esp32\\hardware\\esp32\\3.3.12,C:\\MangoScan\\arduino\\data\\packages\\esp32\\hardware\\esp32\\3.3.12",
+  "otherLibrariesFolders": "C:\\MangoScan\\arduino\\user\\libraries",
+  "sketchLocation": "C:\\Users\\ANGELO GALLEROS\\GitHub\\MangoScan\\Firmware\\mangoscan_controller"
+}

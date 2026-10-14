@@ -137,6 +137,13 @@ export interface DeviceStatus {
   last_seen: string | null
 }
 
+/** One bin's ultrasonic sensor, read on demand. absent means no sensor is installed for that bin. */
+export interface SensorReading {
+  bin: number
+  state: 'ok' | 'no_echo' | 'absent'
+  cm: number | null
+}
+
 export interface MachineStatus {
   mode: 'serial' | 'mock'
   devices: DeviceStatus[]

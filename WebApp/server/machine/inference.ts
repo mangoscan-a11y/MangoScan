@@ -121,14 +121,15 @@ export class InferenceClient {
 /**
  * What happens when a mango cannot be classified. It is rejected into the diseased/low-confidence
  * bin, the same way Model 5 treats a missing dimension, so an outage never sends unchecked fruit
- * into the sellable bins. Names mirror MyTasks/model5_fusion/config/routing.toml bin 7.
+ * into the sellable bins. Names mirror MyTasks/model5_fusion/config/routing.toml bin 1; the
+ * test in bin-numbering.test.ts fails if the two drift apart.
  */
 export function fallbackInference(scanId: number, declaredVariety: string | null, reason: string): InferenceResult {
   return {
     models: {},
     decision: {
       scan_id: String(scanId),
-      bin_index: 7,
+      bin_index: 1,
       bin_name: 'REJECT_DISEASED',
       quality_verdict: 'rejected',
       reason_code: reason,
@@ -138,7 +139,7 @@ export function fallbackInference(scanId: number, declaredVariety: string | null
       declared_variety: declaredVariety,
       variety_match: null,
       alerts: [reason],
-      decision_trace: [{ step: 'fallback', result: 'bin 7', detail: reason }],
+      decision_trace: [{ step: 'fallback', result: 'bin 1', detail: reason }],
       engine_version: 'fallback',
       config_version: 'fallback',
     },

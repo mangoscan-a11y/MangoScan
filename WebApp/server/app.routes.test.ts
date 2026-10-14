@@ -123,6 +123,37 @@ describe.skipIf(!hasMongo)('HTTP routes', () => {
     expect((await send('POST', '/api/dev/mock/bin', { bin: 11, full: true })).status).toBe(400)
   })
 
+  it('shows what a camera sees without scanning anything', async () => {
+    const before = (await get('/api/scans')).body.count
+    const sortsBefore = h.ctrl.sorts.length
+    const r = await raw(app.port, { method: 'POST', path: '/api/machine/preview/cam-1' })
+    expect(r.status).toBe(200)
+    expect(r.headers['content-type']).toBe('image/jpeg')
+    expect(r.headers['cache-control']).toBe('no-store')
+    expect(r.bytes.subarray(0, 2)).toEqual(Buffer.from([0xff, 0xd8]))
+    expect((await get('/api/scans')).body.count).toBe(before)
+    expect(h.ctrl.sorts).toHaveLength(sortsBefore)
+  })
+
+  it('refuses a preview of a camera that is not there or has a bad name', async () => {
+    expect((await send('POST', '/api/machine/preview/cam-9')).status).toBe(404)
+    expect((await send('POST', '/api/machine/preview/..%2Fetc')).status).toBe(400)
+  })
+
+  it('reports the bin sensors, installed or not', async () => {
+    h.ctrl.setDistance(1, 23)
+    h.ctrl.setDistance(2, -1)
+    h.ctrl.setDistance(3, null)
+    const r = await send('POST', '/api/machine/sensors')
+    expect(r.status).toBe(200)
+    expect(r.body.sensors).toHaveLength(8)
+    expect(r.body.sensors.slice(0, 3)).toEqual([
+      { bin: 1, state: 'ok', cm: 23 },
+      { bin: 2, state: 'no_echo', cm: null },
+      { bin: 3, state: 'absent', cm: null },
+    ])
+  })
+
   it('ingests a scan posted by an outside pipeline', async () => {
     const result = greenMedium('ignored', null)
     const r = await send('POST', '/api/scans', { ...result, processing_seconds: 0.8 })

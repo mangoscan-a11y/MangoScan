@@ -51,6 +51,7 @@ const helloSchema = z.object({
 })
 type Hello = z.infer<typeof helloSchema>
 const binSchema = z.object({ t: z.literal('bin'), bin: z.number().int().min(1).max(8), full: z.boolean() })
+const distSchema = z.object({ t: z.literal('dist'), cm: z.array(z.number().int().min(-1).max(1000).nullable()).length(8) })
 const ackSchema = z.object({ t: z.literal('ack'), ok: z.boolean(), ms: z.number().nonnegative().max(60000).optional() })
 
 const MANGO_DEBOUNCE_MS = 300
@@ -82,6 +83,17 @@ export class Device {
     }
     if (frame.kind !== 'image' || !isJpeg(frame.data)) throw new Error('camera sent data that is not a valid JPEG')
     return frame.data
+  }
+
+  /**
+   * Read every bin's ultrasonic sensor once. Per bin: centimetres, -1 when the
+   * sensor heard no echo, null when no sensor is installed for that bin.
+   */
+  async distances(timeoutMs: number): Promise<(number | null)[]> {
+    const frame = await this.link.request({ t: 'dist?' }, (f) => f.kind === 'json' && f.msg.t === 'dist', timeoutMs)
+    const report = frame.kind === 'json' ? distSchema.safeParse(frame.msg) : null
+    if (!report?.success) throw new Error('controller sent a distance report that is not readable')
+    return report.data.cm
   }
 
   /** Send a servo command and wait for the controller acknowledgement. */

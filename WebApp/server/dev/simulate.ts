@@ -4,14 +4,14 @@ import type { InferenceResult } from '../types.ts'
 // for the seed script, the simulator and tests. Real routing lives in Model 5.
 
 export const BINS = [
-  { index: 1, name: 'GREEN_SMALL', verdict: 'passed', s1: 'group_green', s2: 'slot_small' },
-  { index: 2, name: 'GREEN_MEDIUM', verdict: 'passed', s1: 'group_green', s2: 'slot_medium' },
-  { index: 3, name: 'GREEN_LARGE', verdict: 'passed', s1: 'group_green', s2: 'slot_large' },
+  { index: 1, name: 'REJECT_DISEASED', verdict: 'rejected', s1: 'group_diseased', s2: 'slot_park' },
+  { index: 2, name: 'REJECT_BRUISED', verdict: 'rejected', s1: 'group_bruised', s2: 'slot_park' },
+  { index: 3, name: 'GREEN_SMALL', verdict: 'passed', s1: 'group_green', s2: 'slot_small' },
   { index: 4, name: 'YELLOW_SMALL', verdict: 'passed', s1: 'group_yellow', s2: 'slot_small' },
-  { index: 5, name: 'YELLOW_MEDIUM', verdict: 'passed', s1: 'group_yellow', s2: 'slot_medium' },
-  { index: 6, name: 'YELLOW_LARGE', verdict: 'passed', s1: 'group_yellow', s2: 'slot_large' },
-  { index: 7, name: 'REJECT_DISEASED', verdict: 'rejected', s1: 'group_diseased', s2: 'slot_park' },
-  { index: 8, name: 'REJECT_BRUISED', verdict: 'rejected', s1: 'group_bruised', s2: 'slot_park' },
+  { index: 5, name: 'GREEN_MEDIUM', verdict: 'passed', s1: 'group_green', s2: 'slot_medium' },
+  { index: 6, name: 'YELLOW_MEDIUM', verdict: 'passed', s1: 'group_yellow', s2: 'slot_medium' },
+  { index: 7, name: 'GREEN_LARGE', verdict: 'passed', s1: 'group_green', s2: 'slot_large' },
+  { index: 8, name: 'YELLOW_LARGE', verdict: 'passed', s1: 'group_yellow', s2: 'slot_large' },
 ] as const
 
 const VARIETIES = ['Carabao', 'Apple Mango', 'Indian', 'Chupadera', 'Wani', 'Kabayo']
@@ -37,19 +37,19 @@ export function simulateInference(scanId: number, o: SimOptions): InferenceResul
   const declared = o.declared ?? null
   const c = o.confidence ?? 0.9
 
-  let binIndex: number
+  let binName: (typeof BINS)[number]['name']
   let reason: string
   if (disease !== 'Healthy') {
-    binIndex = 7
+    binName = 'REJECT_DISEASED'
     reason = 'DISEASE_DETECTED'
   } else if (bruised) {
-    binIndex = 8
+    binName = 'REJECT_BRUISED'
     reason = 'BRUISE_DETECTED'
   } else {
-    binIndex = (color === 'Green' ? 0 : 3) + SIZES.indexOf(size) + 1
+    binName = `${color.toUpperCase() as Uppercase<typeof color>}_${size.toUpperCase() as Uppercase<typeof size>}`
     reason = 'ROUTED_BY_COLOR_SIZE'
   }
-  const bin = BINS[binIndex - 1]
+  const bin = BINS.find((b) => b.name === binName)!
   const mismatch = declared !== null && declared !== variety
 
   return {

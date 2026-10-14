@@ -27,7 +27,7 @@ function toQuery(params?: Params): string {
   return s ? '?' + s : ''
 }
 
-async function request<T>(url: string, init: RequestInit): Promise<T> {
+async function fetchOk(url: string, init: RequestInit): Promise<Response> {
   let res: Response
   try {
     res = await fetch(url, init)
@@ -45,8 +45,11 @@ async function request<T>(url: string, init: RequestInit): Promise<T> {
     }
     throw new ApiError(res.status, message)
   }
+  return res
+}
 
-  const text = await res.text()
+async function request<T>(url: string, init: RequestInit): Promise<T> {
+  const text = await (await fetchOk(url, init)).text()
   return (text ? JSON.parse(text) : null) as T
 }
 
@@ -61,6 +64,11 @@ export function apiSend<T>(method: 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: st
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
+}
+
+/** For endpoints that answer with a file, such as a camera photo. */
+export async function apiBlob(method: 'POST', path: string): Promise<Blob> {
+  return (await fetchOk(path, { method })).blob()
 }
 
 /** Where a captured image is served from. Paths come from the server and are relative. */

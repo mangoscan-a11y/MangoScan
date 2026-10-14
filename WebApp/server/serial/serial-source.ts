@@ -14,6 +14,11 @@ export function looksLikeEspAdapter(info: { vendorId?: string; productId?: strin
   return info.vendorId !== undefined && ESP_ADAPTER_VENDORS.has(info.vendorId.toLowerCase())
 }
 
+/** The baud for an auto-detected port: its adapter's override when there is one, else the default. */
+export function autoBaud(info: { vendorId?: string }, mode: { baud: number; adapterBauds: Record<string, number> }): number {
+  return (info.vendorId && mode.adapterBauds[info.vendorId.toLowerCase()]) || mode.baud
+}
+
 class SerialTransport implements Transport {
   readonly name: string
   private readonly port: SerialPort
@@ -72,9 +77,10 @@ export class SerialPortSource implements PortSource {
   }
 
   async list(): Promise<PortSpec[]> {
-    if (this.mode.kind === 'list') return this.mode.ports
+    const mode = this.mode
+    if (mode.kind === 'list') return mode.ports
     const found = await SerialPort.list()
-    return found.filter(looksLikeEspAdapter).map((p) => ({ path: p.path, baud: (this.mode as { baud: number }).baud }))
+    return found.filter(looksLikeEspAdapter).map((p) => ({ path: p.path, baud: autoBaud(p, mode) }))
   }
 
   open(spec: PortSpec): Promise<Transport> {

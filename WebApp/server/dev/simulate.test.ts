@@ -5,30 +5,32 @@ import { BINS, randomOptions, simulateInference } from './simulate.ts'
 const decide = (o: Parameters<typeof simulateInference>[1]) => simulateInference(1, o).decision
 
 describe('simulateInference', () => {
-  it('routes healthy unbruised fruit by color and size into bins 1 to 6', () => {
-    expect(decide({ color: 'Green', size: 'Small' })).toMatchObject({ bin_index: 1, bin_name: 'GREEN_SMALL', quality_verdict: 'passed' })
-    expect(decide({ color: 'Green', size: 'Large' }).bin_index).toBe(3)
+  it('routes healthy unbruised fruit by color and size into bins 3 to 8', () => {
+    expect(decide({ color: 'Green', size: 'Small' })).toMatchObject({ bin_index: 3, bin_name: 'GREEN_SMALL', quality_verdict: 'passed' })
     expect(decide({ color: 'Yellow', size: 'Small' }).bin_index).toBe(4)
-    expect(decide({ color: 'Yellow', size: 'Large' }).bin_index).toBe(6)
+    expect(decide({ color: 'Green', size: 'Medium' }).bin_index).toBe(5)
+    expect(decide({ color: 'Yellow', size: 'Medium' }).bin_index).toBe(6)
+    expect(decide({ color: 'Green', size: 'Large' }).bin_index).toBe(7)
+    expect(decide({ color: 'Yellow', size: 'Large' }).bin_index).toBe(8)
   })
 
-  it('rejects disease into bin 7 and bruises into bin 8, disease first', () => {
-    expect(decide({ disease: 'Anthracnose' })).toMatchObject({ bin_index: 7, quality_verdict: 'rejected', reason_code: 'DISEASE_DETECTED' })
-    expect(decide({ bruised: true })).toMatchObject({ bin_index: 8, reason_code: 'BRUISE_DETECTED' })
-    expect(decide({ disease: 'Mango Scab', bruised: true }).bin_index).toBe(7)
+  it('rejects disease into bin 1 and bruises into bin 2, disease first', () => {
+    expect(decide({ disease: 'Anthracnose' })).toMatchObject({ bin_index: 1, quality_verdict: 'rejected', reason_code: 'DISEASE_DETECTED' })
+    expect(decide({ bruised: true })).toMatchObject({ bin_index: 2, reason_code: 'BRUISE_DETECTED' })
+    expect(decide({ disease: 'Mango Scab', bruised: true }).bin_index).toBe(1)
   })
 
   it('raises a variety mismatch alert without changing the bin', () => {
     const d = decide({ variety: 'Wani', declared: 'Carabao', color: 'Green', size: 'Medium' })
     expect(d.alerts).toContain('VARIETY_MISMATCH')
     expect(d.variety_match).toBe(false)
-    expect(d.bin_index).toBe(2)
+    expect(d.bin_index).toBe(5)
   })
 
   it('has eight bins that agree with the routing table', () => {
     expect(BINS.map((b) => b.name)).toEqual([
-      'GREEN_SMALL', 'GREEN_MEDIUM', 'GREEN_LARGE', 'YELLOW_SMALL', 'YELLOW_MEDIUM', 'YELLOW_LARGE',
-      'REJECT_DISEASED', 'REJECT_BRUISED',
+      'REJECT_DISEASED', 'REJECT_BRUISED', 'GREEN_SMALL', 'YELLOW_SMALL', 'GREEN_MEDIUM', 'YELLOW_MEDIUM',
+      'GREEN_LARGE', 'YELLOW_LARGE',
     ])
   })
 

@@ -27,6 +27,9 @@ export function loadMockFrames(dir: string = DEFAULT_MOCK_FRAMES_DIR): (angle: n
   return (angle) => files[(Math.max(1, angle) - 1) % files.length]
 }
 
+const EMPTY_BIN_CM = 30
+const FULL_BIN_CM = 5
+
 export interface MockDeviceOptions {
   id: string
   caps: string[]
@@ -39,6 +42,8 @@ export interface MockDeviceOptions {
   frames?: (angle: number) => Buffer
   /** How many bytes of an image go out per write, to exercise reassembly. */
   chunkSize?: number
+  /** Stay silent when asked for distances, like firmware older than 1.1. */
+  ignoreDistanceRequests?: boolean
 }
 
 /**
@@ -60,6 +65,8 @@ export class MockDevice implements Transport {
   private readonly opts: MockDeviceOptions
   private readonly frames: (angle: number) => Buffer
   private readonly bins: boolean[] = Array.from({ length: 8 }, () => false)
+  // What each bin's ultrasonic sensor reads: cm, -1 for no echo, null for no sensor installed.
+  private readonly distances: (number | null)[] = Array.from({ length: 8 }, () => EMPTY_BIN_CM)
   private readonly parser = new FrameParser()
   private dataCb: ((chunk: Buffer) => void) | null = null
   private closeCb: (() => void) | null = null
@@ -102,7 +109,14 @@ export class MockDevice implements Transport {
   setBinFull(bin: number, full: boolean): void {
     if (bin < 1 || bin > 8) return
     this.bins[bin - 1] = full
+    if (this.distances[bin - 1] !== null) this.distances[bin - 1] = full ? FULL_BIN_CM : EMPTY_BIN_CM
     if (this.opts.caps.includes('bins')) this.sendJson({ t: 'bin', bin, full })
+  }
+
+  /** Set what a bin's sensor reads: cm, -1 for no echo, null for no sensor installed. */
+  setDistance(bin: number, cm: number | null): void {
+    if (bin < 1 || bin > 8) return
+    this.distances[bin - 1] = cm
   }
 
   pressMango(): void {
@@ -124,6 +138,10 @@ export class MockDevice implements Transport {
       case 'bins?':
         if (!caps.includes('bins')) return
         this.bins.forEach((full, i) => this.sendJson({ t: 'bin', bin: i + 1, full }))
+        return
+      case 'dist?':
+        if (!caps.includes('bins') || this.opts.ignoreDistanceRequests) return
+        this.sendJson({ t: 'dist', cm: this.distances })
         return
       case 'sort': {
         if (!caps.includes('servo')) return

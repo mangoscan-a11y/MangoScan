@@ -1,14 +1,14 @@
 import type { BinStatus } from '@/lib/database.types'
 
 const NAMES: Record<number, string> = {
-  1: 'Green Small',
-  2: 'Green Medium',
-  3: 'Green Large',
+  1: 'Diseased',
+  2: 'Bruised',
+  3: 'Green Small',
   4: 'Yellow Small',
-  5: 'Yellow Medium',
-  6: 'Yellow Large',
-  7: 'Diseased',
-  8: 'Bruised',
+  5: 'Green Medium',
+  6: 'Yellow Medium',
+  7: 'Green Large',
+  8: 'Yellow Large',
 }
 
 /** How the operator refers to a bin, e.g. "Bin 3 · Green Large". */
