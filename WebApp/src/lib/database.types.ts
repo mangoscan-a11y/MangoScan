@@ -1,21 +1,8 @@
-export type UserStatus = 'active' | 'inactive'
-export type UserRole = 'admin'
 export type QualityVerdict = 'passed' | 'rejected'
 export type ClassType = 'variety' | 'disease' | 'bruise' | 'color' | 'size'
-export type ActuationStatus = 'success' | 'failed'
+export type ActuationStatus = 'success' | 'failed' | 'pending'
 export type SeverityLevel = 'none' | 'low' | 'moderate' | 'high'
 export type ClassificationDimension = 'variety' | 'disease' | 'bruise' | 'color' | 'size'
-
-export interface Profile {
-  id: string
-  username: string
-  full_name: string
-  email: string | null
-  role: UserRole
-  status: UserStatus
-  created_at: string
-  last_login: string | null
-}
 
 export interface MangoVariety {
   variety_id: number
@@ -49,7 +36,6 @@ export interface SizeGrade {
 
 export interface ScanSession {
   scan_id: number
-  user_id: string | null
   variety_id: number | null
   disease_id: number | null
   ripeness_id: number | null
@@ -60,6 +46,11 @@ export interface ScanSession {
   confidence_score: number | null
   processing_time: number | null
   bin_assigned: string | null
+  bin_index: number | null
+  reason_code: string | null
+  alerts: string[]
+  declared_variety: string | null
+  variety_match: boolean | null
   scan_datetime: string
 }
 
@@ -95,14 +86,6 @@ export interface SortingLog {
   logged_at: string
 }
 
-export interface DailySummary {
-  summary_id: number
-  summary_date: string
-  total_scanned: number
-  total_passed: number
-  total_rejected: number
-}
-
 export interface VDailySummary {
   summary_date: string
   total_scanned: number
@@ -120,11 +103,66 @@ export interface VDailyClassification {
   sort_order: number
 }
 
-// Joined types used in the UI
+// Joined shape the UI works with (the server resolves the relations)
 export interface ScanSessionWithRelations extends ScanSession {
   mango_varieties: MangoVariety | null
   diseases: Disease | null
   ripeness_levels: RipenessLevel | null
   size_grades: SizeGrade | null
-  profiles: Pick<Profile, 'full_name' | 'username'> | null
+}
+
+export interface ScanDetail {
+  images: ScanImage[]
+  detections: DetectionResult[]
+  log: SortingLog | null
+  decision_trace: { step: string; result: string; detail: string }[]
+}
+
+// Machine state
+export interface BinStatus {
+  bin_index: number
+  full: boolean
+  full_since: string | null
+  updated_at: string | null
+}
+
+export interface DeviceStatus {
+  id: string
+  port: string
+  caps: string[]
+  angles: number[]
+  fw: string | null
+  connected: boolean
+  connected_at: string | null
+  last_seen: string | null
+}
+
+export interface MachineStatus {
+  mode: 'serial' | 'mock'
+  devices: DeviceStatus[]
+  bins: BinStatus[]
+  inference: { ok: boolean; detail?: string; mode?: 'mock' | 'custom' | 'none' }
+  declared_variety: string | null
+}
+
+export interface ExportRow {
+  scan_id: number
+  scan_datetime: string
+  variety: string | null
+  disease: string | null
+  severity: string | null
+  is_bruised: boolean | null
+  color: string | null
+  size: string | null
+  quality_verdict: QualityVerdict
+  confidence_score: number | null
+  processing_time: number | null
+  bin_assigned: string | null
+  reason_code: string | null
+  alerts: string[]
+  servo1_action: string | null
+  servo2_action: string | null
+  gate_target: string | null
+  actuation_status: ActuationStatus | null
+  latency_ms: number | null
 }

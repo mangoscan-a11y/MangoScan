@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
-import { supabase } from '@/lib/supabase'
+import { apiGet } from '@/lib/api'
+import { MachinePanel } from '@/features/machine/MachinePanel'
+import { BinGrid } from '@/features/bins/BinGrid'
 import type { ScanSessionWithRelations, VDailySummary, VDailyClassification } from '@/lib/database.types'
 import { DIMENSIONS, pivotDailyClassification } from '@/lib/classification'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -16,14 +18,9 @@ function useTodaySummary() {
   return useQuery({
     queryKey: ['today_summary'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('v_daily_summary')
-        .select('*')
-        .eq('summary_date', todayInManila())
-        .maybeSingle()
-
-      if (error) throw error
-      return data as VDailySummary | null
+      const today = todayInManila()
+      const rows = await apiGet<VDailySummary[]>('/api/summary/daily', { from: today, to: today })
+      return rows[0] ?? null
     },
     refetchInterval: 15_000,
   })
@@ -32,14 +29,9 @@ function useTodaySummary() {
 function useTodayClassification() {
   return useQuery({
     queryKey: ['today_classification'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('v_daily_classification')
-        .select('*')
-        .eq('summary_date', todayInManila())
-
-      if (error) throw error
-      return data as VDailyClassification[]
+    queryFn: () => {
+      const today = todayInManila()
+      return apiGet<VDailyClassification[]>('/api/summary/classification', { from: today, to: today })
     },
     refetchInterval: 15_000,
   })
@@ -48,24 +40,7 @@ function useTodayClassification() {
 function useLatestScan() {
   return useQuery({
     queryKey: ['latest_scan'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('scan_sessions')
-        .select(`
-          *,
-          mango_varieties ( variety_id, variety_name ),
-          diseases ( disease_id, disease_name, severity_level ),
-          ripeness_levels ( ripeness_id, ripeness_name ),
-          size_grades ( size_id, size_name ),
-          profiles ( full_name, username )
-        `)
-        .order('scan_datetime', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-      if (error) throw error
-      return data as ScanSessionWithRelations | null
-    },
+    queryFn: () => apiGet<ScanSessionWithRelations | null>('/api/scans/latest'),
     refetchInterval: 15_000,
   })
 }
@@ -146,6 +121,15 @@ export default function MonitorPage() {
         <p className="text-sm text-muted-foreground mt-0.5">
           {/* Today's sorting activity. Refreshes every 5 seconds. */}
         </p>
+      </div>
+
+      {/* Machine controls and status */}
+      <MachinePanel />
+
+      {/* Bins */}
+      <div>
+        <h2 className="text-sm font-medium text-muted-foreground mb-3">Bins</h2>
+        <BinGrid />
       </div>
 
       {/* Today's totals */}
@@ -245,10 +229,17 @@ export default function MonitorPage() {
                   <p className="font-medium">{latest.bin_assigned ?? '—'}</p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground text-xs">Operator</p>
-                  <p className="font-medium">{latest.profiles?.full_name ?? 'System'}</p>
+                  <p className="text-muted-foreground text-xs">Decision</p>
+                  <p className="font-mono text-xs font-medium">{latest.reason_code ?? '—'}</p>
                 </div>
               </div>
+              {latest.alerts.length > 0 && (
+                <div className="mt-4 flex flex-wrap gap-1.5">
+                  {latest.alerts.map((a) => (
+                    <Badge key={a} variant="warning">{a}</Badge>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         ) : (
@@ -256,7 +247,7 @@ export default function MonitorPage() {
             <CardContent className="flex flex-col items-center justify-center py-12 text-center">
               <Activity className="h-8 w-8 text-muted-foreground mb-3" />
               <p className="text-muted-foreground">No scans recorded yet.</p>
-              <p className="text-xs text-muted-foreground mt-1">Run the simulator: <code className="font-mono bg-muted px-1 rounded">npm run simulator</code></p>
+              <p className="text-xs text-muted-foreground mt-1">Press <span className="font-medium">Scan now</span> above, or run <code className="font-mono bg-muted px-1 rounded">npm run simulator</code></p>
             </CardContent>
           </Card>
         )}
