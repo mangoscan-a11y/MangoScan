@@ -30,6 +30,11 @@ describe('loadConfig', () => {
     })
   })
 
+  it('overrides the auto-detect baud per USB adapter', () => {
+    const c = loadConfig({ SERIAL_ADAPTER_BAUDS: '10C4:115200, 1a86:460800' }, cwd)
+    expect(c.serial).toEqual({ kind: 'auto', baud: 921600, adapterBauds: { '10c4': 115200, '1a86': 460800 } })
+  })
+
   it('understands mock and none', () => {
     expect(loadConfig({ SERIAL_PORTS: 'mock' }, cwd).serial).toEqual({ kind: 'mock' })
     expect(loadConfig({ SERIAL_PORTS: 'none' }, cwd).serial).toEqual({ kind: 'none' })
@@ -49,6 +54,9 @@ describe('loadConfig', () => {
     [{ PORT: '70000' }, /PORT/],
     [{ SERIAL_BAUD: '12' }, /SERIAL_BAUD/],
     [{ SERIAL_PORTS: 'COM3;rm' }, /SERIAL_PORTS/],
+    [{ SERIAL_ADAPTER_BAUDS: 'cp210x:115200' }, /SERIAL_ADAPTER_BAUDS/],
+    [{ SERIAL_ADAPTER_BAUDS: '10c4:12' }, /SERIAL_ADAPTER_BAUDS/],
+    [{ SERIAL_ADAPTER_BAUDS: '10c4' }, /SERIAL_ADAPTER_BAUDS/],
     [{ INFERENCE_URL: 'ftp://x' }, /INFERENCE_URL/],
     [{ HOST: '' }, /HOST/],
   ])('rejects bad value %j', (env, message) => {

@@ -33,7 +33,7 @@ function inference(overrides: Partial<InferenceResult> = {}): InferenceResult {
     },
     decision: {
       scan_id: '42',
-      bin_index: 2,
+      bin_index: 5,
       bin_name: 'GREEN_MEDIUM',
       quality_verdict: 'passed',
       reason_code: 'ROUTED_BY_COLOR_SIZE',
@@ -71,7 +71,7 @@ describe('buildScanDocument', () => {
     expect(doc).toMatchObject({
       scan_id: 42,
       quality_verdict: 'passed',
-      bin_index: 2,
+      bin_index: 5,
       bin_assigned: 'GREEN_MEDIUM',
       reason_code: 'ROUTED_BY_COLOR_SIZE',
       declared_variety: 'Carabao',
@@ -157,9 +157,9 @@ describe('buildScanDocument', () => {
   it('adds BIN_FULL after the decision alerts when the target bin is already full', () => {
     const inf = inference()
     inf.decision.alerts = ['VARIETY_MISMATCH']
-    const doc = buildScanDocument(base({ inference: inf, fullBins: new Set([2]) }))
+    const doc = buildScanDocument(base({ inference: inf, fullBins: new Set([5]) }))
     expect(doc.alerts).toEqual(['VARIETY_MISMATCH', 'BIN_FULL'])
-    expect(buildScanDocument(base({ fullBins: new Set([5]) })).alerts).toEqual([])
+    expect(buildScanDocument(base({ fullBins: new Set([2]) })).alerts).toEqual([])
   })
 
   it('embeds images with deterministic ids and a pending sorting log', () => {

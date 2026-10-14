@@ -1,20 +1,30 @@
 /*
- * MangoScan camera (AI-Thinker ESP32-CAM)
+ * MangoScan camera
  *
  * Takes a photo when the laptop asks for one and sends it back over the USB
  * cable. Wire format, flashing and troubleshooting: Firmware/README.md
  *
- * Board: "AI Thinker ESP32-CAM" (needs the PSRAM it ships with).
+ * Boards (pick one with CAMERA_BOARD below):
+ *   ESP32-S3 + OV5640 (the rig's board). Arduino settings: ESP32S3 Dev Module,
+ *     PSRAM "OPI PSRAM", Flash Size 16MB, USB CDC On Boot "Disabled".
+ *   AI-Thinker ESP32-CAM (needs the PSRAM it ships with): AI Thinker ESP32-CAM.
  * No extra libraries: esp_camera is part of the ESP32 Arduino core.
  */
 #include "esp_camera.h"
 #include "esp_log.h"
 
+#define BOARD_ESP32S3_OV5640 1
+#define BOARD_AI_THINKER 2
+
 // ----------------------------------------------------------------------------
 // CONFIGURE
 // ----------------------------------------------------------------------------
+#define CAMERA_BOARD BOARD_ESP32S3_OV5640
+
 static const char *DEVICE_ID = "cam-1";
-static const unsigned long BAUD = 921600;  // must match SERIAL_BAUD on the laptop
+// Must match SERIAL_BAUD (or this port's entry in SERIAL_PORTS) on the laptop. A photo is ~20-40 KB and the
+// server gives up on a capture after 2 s, so 115200 (about 2 s per photo) is too slow.
+static const unsigned long BAUD = 921600;
 
 // Angles this camera can deliver. One physical camera that sees the mango from
 // several positions (rotation or mirrors) lists them all. With one camera per
@@ -23,12 +33,32 @@ static const int ANGLES[] = {1, 2, 3, 4, 5};
 
 static const framesize_t FRAME_SIZE = FRAMESIZE_VGA;  // 640x480, about 20-40 KB per photo
 static const int JPEG_QUALITY = 12;                   // 10 best .. 63 smallest
-static const bool USE_FLASH_LED = false;              // the on-board white LED on GPIO 4
-static const int FLASH_LED_PIN = 4;
+static const bool USE_FLASH_LED = false;              // AI-Thinker only: the on-board white LED
 static const bool FLUSH_STALE_FRAME = true;           // drop the buffered frame so each photo is fresh
 // ----------------------------------------------------------------------------
 
-// AI-Thinker pin map
+#if CAMERA_BOARD == BOARD_ESP32S3_OV5640
+// ESP32-S3 + OV5640 with two USB-C ports. Found by probing the board: this map
+// answered with sensor ID 0x5640. It has no flash LED.
+#define FLASH_LED_PIN -1
+#define PWDN_GPIO_NUM -1
+#define RESET_GPIO_NUM -1
+#define XCLK_GPIO_NUM 15
+#define SIOD_GPIO_NUM 4
+#define SIOC_GPIO_NUM 5
+#define Y9_GPIO_NUM 16
+#define Y8_GPIO_NUM 17
+#define Y7_GPIO_NUM 18
+#define Y6_GPIO_NUM 12
+#define Y5_GPIO_NUM 10
+#define Y4_GPIO_NUM 8
+#define Y3_GPIO_NUM 9
+#define Y2_GPIO_NUM 11
+#define VSYNC_GPIO_NUM 6
+#define HREF_GPIO_NUM 7
+#define PCLK_GPIO_NUM 13
+#elif CAMERA_BOARD == BOARD_AI_THINKER
+#define FLASH_LED_PIN 4
 #define PWDN_GPIO_NUM 32
 #define RESET_GPIO_NUM -1
 #define XCLK_GPIO_NUM 0
@@ -45,6 +75,11 @@ static const bool FLUSH_STALE_FRAME = true;           // drop the buffered frame
 #define VSYNC_GPIO_NUM 25
 #define HREF_GPIO_NUM 23
 #define PCLK_GPIO_NUM 22
+#else
+#error "CAMERA_BOARD must be BOARD_ESP32S3_OV5640 or BOARD_AI_THINKER"
+#endif
+
+static_assert(!USE_FLASH_LED || FLASH_LED_PIN >= 0, "USE_FLASH_LED needs a board with a flash LED");
 
 static bool cameraReady = false;
 static char line[256];
@@ -86,7 +121,7 @@ static void sendHello() {
   Serial.printf("{\"t\":\"hello\",\"id\":\"%s\",\"caps\":[\"camera\"],\"angles\":[", DEVICE_ID);
   const int n = sizeof(ANGLES) / sizeof(ANGLES[0]);
   for (int i = 0; i < n; i++) Serial.printf("%s%d", i ? "," : "", ANGLES[i]);
-  Serial.print("],\"fw\":\"1.0\"}\n");
+  Serial.print("],\"fw\":\"1.1\"}\n");
 }
 
 static void sendError(long scanId, long angle, const char *msg) {

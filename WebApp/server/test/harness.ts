@@ -6,6 +6,7 @@ import type { AddressInfo } from 'node:net'
 import { ensureIndexes, seedReference } from '../db.ts'
 import { EventHub } from '../events.ts'
 import { BinManager } from '../machine/bin-manager.ts'
+import { HardwareCheck } from '../machine/hardware-check.ts'
 import { InferenceClient } from '../machine/inference.ts'
 import { Orchestrator } from '../machine/orchestrator.ts'
 import { RefCache } from '../machine/ref-cache.ts'
@@ -27,7 +28,7 @@ export function greenMedium(scanId: string, declared: string | null): InferenceR
     },
     decision: {
       scan_id: scanId,
-      bin_index: 2,
+      bin_index: 5,
       bin_name: 'GREEN_MEDIUM',
       quality_verdict: 'passed',
       reason_code: 'ROUTED_BY_COLOR_SIZE',
@@ -56,6 +57,7 @@ export interface Harness {
   ctrl: MockDevice
   cam: MockDevice
   orchestrator: Orchestrator
+  check: HardwareCheck
   storageDir: string
   inferenceBodies: Record<string, unknown>[]
   logs: string[]
@@ -126,6 +128,8 @@ export async function createHarness(opts: { controller?: boolean; camera?: boole
     sortTimeoutMs: 500,
   })
 
+  const check = new HardwareCheck({ devices, queue: orchestrator, captureTimeoutMs: 300, distTimeoutMs: 300 })
+
   wireDevices({ devices, bins, hub, db: t.db, orchestrator, log: (m) => logs.push(m) })
   devices.start()
   if (opts.controller !== false) await waitFor(() => devices.controller(), 2000, 'controller')
@@ -133,7 +137,7 @@ export async function createHarness(opts: { controller?: boolean; camera?: boole
 
   return {
     logs,
-    t, hub, events, refs, bins, source, devices, ctrl, cam, orchestrator, storageDir, inferenceBodies,
+    t, hub, events, refs, bins, source, devices, ctrl, cam, orchestrator, check, storageDir, inferenceBodies,
     setInference(fn) {
       handler = fn
     },

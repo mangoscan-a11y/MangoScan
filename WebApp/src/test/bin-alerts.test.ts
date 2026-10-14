@@ -57,10 +57,14 @@ describe('fullBins and binLabel', () => {
   })
 
   it('names bins the way the operator sees the machine', () => {
-    expect(binLabel(1)).toBe('Bin 1 · Green Small')
-    expect(binLabel(6)).toBe('Bin 6 · Yellow Large')
-    expect(binLabel(7)).toBe('Bin 7 · Diseased')
-    expect(binLabel(8)).toBe('Bin 8 · Bruised')
+    expect(binLabel(1)).toBe('Bin 1 · Diseased')
+    expect(binLabel(2)).toBe('Bin 2 · Bruised')
+    expect(binLabel(3)).toBe('Bin 3 · Green Small')
+    expect(binLabel(4)).toBe('Bin 4 · Yellow Small')
+    expect(binLabel(5)).toBe('Bin 5 · Green Medium')
+    expect(binLabel(6)).toBe('Bin 6 · Yellow Medium')
+    expect(binLabel(7)).toBe('Bin 7 · Green Large')
+    expect(binLabel(8)).toBe('Bin 8 · Yellow Large')
   })
 
   it('falls back gracefully for an unknown bin', () => {

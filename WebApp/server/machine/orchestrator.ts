@@ -76,11 +76,16 @@ export class Orchestrator {
 
   /** Queue a scan. Scans run strictly one at a time because there is one conveyor. */
   scan(trigger: 'manual' | 'device'): Promise<ScanDoc> {
+    return this.exclusive(() => this.runOne(trigger))
+  }
+
+  /** Run a short hardware job in the scan queue, so it never overlaps a scan on the camera or the servos. */
+  exclusive<T>(job: () => Promise<T>): Promise<T> {
     if (this.pending >= MAX_PENDING) {
       return Promise.reject(new ScanError('BUSY', 'The machine is still working through earlier scans'))
     }
     this.pending++
-    const run = this.tail.then(() => this.runOne(trigger))
+    const run = this.tail.then(job)
     this.tail = run.catch(() => {})
     return run.finally(() => {
       this.pending--

@@ -7,8 +7,9 @@ import type { Config } from './config.ts'
 import { COLLECTIONS, nextScanId } from './db.ts'
 import type { EventHub } from './events.ts'
 import { HttpError, errorHandler, hostGuard, jsonOnly, originGuard, securityHeaders } from './http/security.ts'
-import { idParam, ingestBody, mockBinBody, priceBody, rangeQuery, scanListQuery, settingsBody } from './http/schemas.ts'
+import { cameraParam, idParam, ingestBody, mockBinBody, priceBody, rangeQuery, scanListQuery, settingsBody } from './http/schemas.ts'
 import type { BinManager } from './machine/bin-manager.ts'
+import { CheckError, type HardwareCheck } from './machine/hardware-check.ts'
 import type { InferenceClient } from './machine/inference.ts'
 import { Orchestrator, ScanError } from './machine/orchestrator.ts'
 import type { RefCache } from './machine/ref-cache.ts'
@@ -27,6 +28,7 @@ export interface AppDeps {
   hub: EventHub
   devices: DeviceManager
   orchestrator: Pick<Orchestrator, 'scan'>
+  check: Pick<HardwareCheck, 'preview' | 'sensors'>
   inference: Pick<InferenceClient, 'health'>
   mode: 'serial' | 'mock'
   mock: { controller: MockDevice } | null
@@ -45,7 +47,7 @@ function parse<S extends ZodTypeAny>(schema: S, data: unknown): output<S> {
 const query = (req: Request) => req.query as Record<string, unknown>
 
 export function createApp(deps: AppDeps): Express {
-  const { config, db, refs, bins, hub, devices, orchestrator, inference, log } = deps
+  const { config, db, refs, bins, hub, devices, orchestrator, check, inference, log } = deps
   const app = express()
   app.disable('x-powered-by')
 
@@ -173,6 +175,29 @@ export function createApp(deps: AppDeps): Express {
       }
       throw err
     }
+  })
+
+  // Look at the hardware without scanning: nothing is stored and no servo moves.
+  async function checkHardware<T>(job: () => Promise<T>): Promise<T> {
+    try {
+      return await job()
+    } catch (err) {
+      if (err instanceof ScanError) throw new HttpError(429, err.message)
+      if (err instanceof CheckError) {
+        throw new HttpError(err.code === 'NO_CAMERA' ? 404 : err.code === 'NO_CONTROLLER' ? 409 : 502, err.message)
+      }
+      throw err
+    }
+  }
+
+  app.post('/api/machine/preview/:camera', async (req, res) => {
+    const { camera } = parse(cameraParam, req.params)
+    const jpeg = await checkHardware(() => check.preview(camera))
+    res.type('image/jpeg').send(jpeg)
+  })
+
+  app.post('/api/machine/sensors', async (_req, res) => {
+    res.json({ sensors: await checkHardware(() => check.sensors()) })
   })
 
   app.put('/api/machine/settings', async (req, res) => {

@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast'
 import { useMangoVarieties } from '@/features/scans/hooks'
 import { cn } from '@/lib/utils'
+import { HardwareCheckDialog } from './HardwareCheckDialog'
 import { useMachineStatus, useMockControls, useRunScan, useSetDeclaredVariety } from './hooks'
 
 const NOT_SET = 'none'
@@ -94,6 +95,7 @@ export function MachinePanel() {
             <Play className="h-4 w-4" />
             {runScan.isPending ? 'Scanning…' : 'Scan now'}
           </Button>
+          <HardwareCheckDialog devices={devices} />
           {!hasCamera && <p className="text-xs text-muted-foreground">Needs a connected camera.</p>}
         </div>
 

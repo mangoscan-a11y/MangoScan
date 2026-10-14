@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApiError, apiGet, apiSend } from '@/lib/api'
+import { ApiError, apiBlob, apiGet, apiSend } from '@/lib/api'
 
 function respond(status: number, body: unknown) {
   const fetchMock = vi.fn().mockResolvedValue(
@@ -69,5 +69,24 @@ describe('apiSend', () => {
     const init = fetchMock.mock.calls[0][1]
     expect(init.body).toBeUndefined()
     expect(init.headers?.['Content-Type']).toBeUndefined()
+  })
+})
+
+describe('apiBlob', () => {
+  it('posts without a body and returns the bytes', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xd9]), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const blob = await apiBlob('POST', '/api/machine/preview/cam-1')
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/machine/preview/cam-1')
+    expect(fetchMock.mock.calls[0][1].method).toBe('POST')
+    expect(new Uint8Array(await blob.arrayBuffer())).toEqual(new Uint8Array([0xff, 0xd8, 0xff, 0xd9]))
+  })
+
+  it('turns a server error into an ApiError carrying the server message', async () => {
+    respond(502, { error: 'The camera did not deliver a photo' })
+    await expect(apiBlob('POST', '/api/machine/preview/cam-1')).rejects.toMatchObject({
+      status: 502,
+      message: 'The camera did not deliver a photo',
+    })
   })
 })

@@ -1,32 +1,52 @@
 /*
  * MangoScan controller (ESP32 dev board)
  *
- * Moves the two sorting servos on command, reports when a bin is full, and
- * optionally tells the laptop that a mango has arrived at the camera station.
+ * Moves the two sorting servos on command (through a PCA9685 servo driver), reports when a
+ * bin is full (ultrasonic sensors), and optionally tells the laptop that a mango has arrived
+ * at the camera station.
  *
  * Talks to the laptop over the USB cable as one JSON object per line.
  * See Firmware/README.md for the protocol, wiring and calibration.
  *
- * Library needed: "ESP32Servo" (Arduino Library Manager).
+ * Library needed: "Adafruit PWM Servo Driver Library" (Arduino Library Manager).
  * Board: "ESP32 Dev Module".
  */
-#include <ESP32Servo.h>
+#include <Wire.h>
+#include <Adafruit_PWMServoDriver.h>
+#include "bin_level.h"
 
 // ----------------------------------------------------------------------------
 // CONFIGURE FOR YOUR WIRING
 // ----------------------------------------------------------------------------
 static const char *DEVICE_ID = "ctrl-1";
-static const unsigned long BAUD = 921600;  // must match SERIAL_BAUD on the laptop
+// The USB link on the first rig failed above 115200 baud. Must match SERIAL_BAUD on the laptop.
+static const unsigned long BAUD = 115200;
 
-static const int SERVO1_PIN = 18;  // selects the group: green, yellow, diseased, bruised
-static const int SERVO2_PIN = 19;  // selects the slot: small, medium, large, park
+// Servo driver: PCA9685 on I2C. Found by scan at SDA 21 / SCL 22, address 0x40.
+static const int SDA_PIN = 21;
+static const int SCL_PIN = 22;
+static const uint8_t PCA_ADDR = 0x40;
+static const int SERVO1_CH = 0;  // PLACEHOLDER: selects the group: green, yellow, diseased, bruised
+static const int SERVO2_CH = 1;  // PLACEHOLDER: selects the slot: small, medium, large, park
+static const int SERVO_MIN_US = 500;   // pulse for 0 degrees
+static const int SERVO_MAX_US = 2400;  // pulse for 180 degrees
+// Move to the reject/park pose at power-up. Leave false until the angles below are calibrated,
+// otherwise an uncalibrated pose could drive the mechanism into a stop.
+static const bool MOVE_TO_HOME_AT_BOOT = false;
 
-// Bin-full sensors for bins 1..8. Wired between the pin and GND (internal pull-up).
-static const int BIN_PINS[8] = {32, 33, 25, 26, 27, 14, 13, 4};
-static const int BIN_FULL_LEVEL = LOW;  // pin level that means "this bin is full"
+// Bin-full sensors (ultrasonic, mounted above each bin looking down), in bin order:
+// 1 Diseased, 2 Bruised, 3 Green Small, 4 Yellow Small, 5 Green Medium, 6 Yellow Medium,
+// 7 Green Large, 8 Yellow Large. -1 means no sensor installed for that bin.
+static const int TRIG_PINS[8] = {16, -1, -1, -1, -1, -1, -1, -1};
+static const int ECHO_PINS[8] = {26, -1, -1, -1, -1, -1, -1, -1};
+static const int FULL_CM = 8;            // PLACEHOLDER: full when the fruit is this close to the sensor
+static const int CLEAR_MARGIN_CM = 3;    // ... and not full again until it is FULL_CM + this far
+static const uint8_t CONFIRM_READINGS = 3;
+static const unsigned long ECHO_TIMEOUT_US = 12000;  // about 2 m; no echo by then
+static const unsigned long PING_INTERVAL_MS = 60;    // one sensor is pinged per interval
 
 // Mango-arrived sensor (IR break beam etc.). Set to -1 if there is none.
-static const int MANGO_PIN = 15;
+static const int MANGO_PIN = -1;
 static const int MANGO_ACTIVE_LEVEL = LOW;
 
 // Servo angles in degrees. THESE ARE PLACEHOLDERS: calibrate on the real machine.
@@ -43,12 +63,14 @@ static const unsigned long SERVO_SETTLE_MS = 400;  // time allowed for both serv
 static const unsigned long DEBOUNCE_MS = 150;
 // ----------------------------------------------------------------------------
 
-Servo servo1;
-Servo servo2;
+Adafruit_PWMServoDriver pwm(PCA_ADDR);
+static bool servoDriverOk = false;
 
-static bool binState[8];
-static bool binRaw[8];
-static unsigned long binChangedAt[8];
+#define NEW_LEVEL BinLevel(FULL_CM, CLEAR_MARGIN_CM, CONFIRM_READINGS)
+static BinLevel levels[8] = {NEW_LEVEL, NEW_LEVEL, NEW_LEVEL, NEW_LEVEL, NEW_LEVEL, NEW_LEVEL, NEW_LEVEL, NEW_LEVEL};
+static int nextSensor = 0;
+static unsigned long lastPingAt = 0;
+
 static bool mangoWasActive = false;
 static unsigned long mangoChangedAt = 0;
 
@@ -88,12 +110,51 @@ static bool jsonStr(const char *json, const char *key, char *out, size_t cap) {
 // ---- protocol output --------------------------------------------------------
 
 static void sendHello() {
-  Serial.printf("{\"t\":\"hello\",\"id\":\"%s\",\"caps\":[\"servo\",\"bins\"%s],\"fw\":\"1.0\"}\n", DEVICE_ID,
+  Serial.printf("{\"t\":\"hello\",\"id\":\"%s\",\"caps\":[\"servo\",\"bins\"%s],\"fw\":\"1.2\"}\n", DEVICE_ID,
                 MANGO_PIN >= 0 ? ",\"mango\"" : "");
 }
 
 static void sendBin(int index) {
-  Serial.printf("{\"t\":\"bin\",\"bin\":%d,\"full\":%s}\n", index + 1, binState[index] ? "true" : "false");
+  Serial.printf("{\"t\":\"bin\",\"bin\":%d,\"full\":%s}\n", index + 1, levels[index].full ? "true" : "false");
+}
+
+// ---- ultrasonic sensors ----------------------------------------------------------
+
+static bool hasSensor(int i) { return TRIG_PINS[i] >= 0 && ECHO_PINS[i] >= 0; }
+
+// Distance in whole cm, or -1 when no echo came back.
+static int readCm(int i) {
+  digitalWrite(TRIG_PINS[i], LOW);
+  delayMicroseconds(3);
+  digitalWrite(TRIG_PINS[i], HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_PINS[i], LOW);
+  unsigned long us = pulseIn(ECHO_PINS[i], HIGH, ECHO_TIMEOUT_US);
+  return us == 0 ? -1 : (int)(us / 58);
+}
+
+static void sendDistances() {
+  Serial.print("{\"t\":\"dist\",\"cm\":[");
+  for (int i = 0; i < 8; i++) {
+    if (i) Serial.print(',');
+    if (hasSensor(i)) Serial.print(readCm(i));
+    else Serial.print("null");
+  }
+  Serial.print("]}\n");
+}
+
+// Ping the next installed sensor once per interval and report any change.
+static void pingNext() {
+  unsigned long now = millis();
+  if (now - lastPingAt < PING_INTERVAL_MS) return;
+  for (int n = 0; n < 8; n++) {
+    int i = (nextSensor + n) % 8;
+    if (!hasSensor(i)) continue;
+    lastPingAt = now;
+    nextSensor = (i + 1) % 8;
+    if (levels[i].update(readCm(i))) sendBin(i);
+    return;
+  }
 }
 
 // ---- servo handling ------------------------------------------------------------
@@ -105,6 +166,11 @@ static int poseAngle(const Pose *poses, size_t count, const char *name) {
   return -1;
 }
 
+static void moveServo(int channel, int degrees) {
+  int us = SERVO_MIN_US + (long)(SERVO_MAX_US - SERVO_MIN_US) * constrain(degrees, 0, 180) / 180;
+  pwm.writeMicroseconds(channel, us);
+}
+
 static void handleSort(const char *json) {
   long scanId = jsonInt(json, "scan_id", -1);
   char s1[32], s2[32];
@@ -112,16 +178,26 @@ static void handleSort(const char *json) {
   if (jsonStr(json, "s1", s1, sizeof(s1))) a1 = poseAngle(SERVO1_POSES, sizeof(SERVO1_POSES) / sizeof(Pose), s1);
   if (jsonStr(json, "s2", s2, sizeof(s2))) a2 = poseAngle(SERVO2_POSES, sizeof(SERVO2_POSES) / sizeof(Pose), s2);
 
-  if (scanId < 0 || a1 < 0 || a2 < 0) {
-    // Unknown action names: do not move anything, say so.
+  if (scanId < 0 || a1 < 0 || a2 < 0 || !servoDriverOk) {
+    // Unknown action names or no servo driver: do not move anything, say so.
     Serial.printf("{\"t\":\"ack\",\"scan_id\":%ld,\"ok\":false,\"ms\":0}\n", scanId);
     return;
   }
   unsigned long start = millis();
-  servo1.write(a1);
-  servo2.write(a2);
+  moveServo(SERVO1_CH, a1);
+  moveServo(SERVO2_CH, a2);
   delay(SERVO_SETTLE_MS);
   Serial.printf("{\"t\":\"ack\",\"scan_id\":%ld,\"ok\":true,\"ms\":%lu}\n", scanId, millis() - start);
+}
+
+// Calibration helper: {"t":"jog","ch":0,"deg":90} moves one servo-driver channel. Use it with the
+// MangoScan server stopped, to find which channel is which and which angles line up with the bins.
+static void handleJog(const char *json) {
+  long ch = jsonInt(json, "ch", -1);
+  long deg = jsonInt(json, "deg", -1);
+  bool ok = servoDriverOk && ch >= 0 && ch <= 15 && deg >= 0 && deg <= 180;
+  if (ok) moveServo((int)ch, (int)deg);
+  Serial.printf("{\"t\":\"jog\",\"ok\":%s,\"ch\":%ld,\"deg\":%ld}\n", ok ? "true" : "false", ch, deg);
 }
 
 // ---- input handling ------------------------------------------------------------------
@@ -134,6 +210,8 @@ static void handleLine(const char *json) {
   else if (strcmp(type, "bins?") == 0) {
     for (int i = 0; i < 8; i++) sendBin(i);
   } else if (strcmp(type, "sort") == 0) handleSort(json);
+  else if (strcmp(type, "dist?") == 0) sendDistances();
+  else if (strcmp(type, "jog") == 0) handleJog(json);
 }
 
 static void readSerial() {
@@ -150,45 +228,39 @@ static void readSerial() {
   }
 }
 
-static void scanSensors() {
+static void scanMango() {
+  if (MANGO_PIN < 0) return;
   unsigned long now = millis();
-  for (int i = 0; i < 8; i++) {
-    bool full = digitalRead(BIN_PINS[i]) == BIN_FULL_LEVEL;
-    if (full != binRaw[i]) {
-      binRaw[i] = full;
-      binChangedAt[i] = now;
-    } else if (full != binState[i] && now - binChangedAt[i] >= DEBOUNCE_MS) {
-      binState[i] = full;
-      sendBin(i);
-    }
-  }
-  if (MANGO_PIN >= 0) {
-    bool active = digitalRead(MANGO_PIN) == MANGO_ACTIVE_LEVEL;
-    if (active != mangoWasActive && now - mangoChangedAt >= DEBOUNCE_MS) {
-      mangoChangedAt = now;
-      mangoWasActive = active;
-      if (active) Serial.print("{\"t\":\"mango\"}\n");
-    }
+  bool active = digitalRead(MANGO_PIN) == MANGO_ACTIVE_LEVEL;
+  if (active != mangoWasActive && now - mangoChangedAt >= DEBOUNCE_MS) {
+    mangoChangedAt = now;
+    mangoWasActive = active;
+    if (active) Serial.print("{\"t\":\"mango\"}\n");
   }
 }
 
 void setup() {
   Serial.begin(BAUD);
 
-  ESP32PWM::allocateTimer(0);
-  ESP32PWM::allocateTimer(1);
-  servo1.setPeriodHertz(50);
-  servo2.setPeriodHertz(50);
-  servo1.attach(SERVO1_PIN, 500, 2400);
-  servo2.attach(SERVO2_PIN, 500, 2400);
-  // Home position: reject group, parked slot, so a stray mango is never passed.
-  servo1.write(poseAngle(SERVO1_POSES, sizeof(SERVO1_POSES) / sizeof(Pose), "group_diseased"));
-  servo2.write(poseAngle(SERVO2_POSES, sizeof(SERVO2_POSES) / sizeof(Pose), "slot_park"));
+  Wire.begin(SDA_PIN, SCL_PIN);
+  Wire.beginTransmission(PCA_ADDR);
+  servoDriverOk = Wire.endTransmission() == 0;
+  if (servoDriverOk) {
+    pwm.begin();
+    pwm.setOscillatorFrequency(27000000);
+    pwm.setPWMFreq(50);
+    if (MOVE_TO_HOME_AT_BOOT) {
+      // Home position: reject group, parked slot, so a stray mango is never passed.
+      moveServo(SERVO1_CH, poseAngle(SERVO1_POSES, sizeof(SERVO1_POSES) / sizeof(Pose), "group_diseased"));
+      moveServo(SERVO2_CH, poseAngle(SERVO2_POSES, sizeof(SERVO2_POSES) / sizeof(Pose), "slot_park"));
+    }
+  }
 
   for (int i = 0; i < 8; i++) {
-    pinMode(BIN_PINS[i], INPUT_PULLUP);
-    binRaw[i] = binState[i] = (digitalRead(BIN_PINS[i]) == BIN_FULL_LEVEL);
-    binChangedAt[i] = millis();
+    if (!hasSensor(i)) continue;
+    pinMode(TRIG_PINS[i], OUTPUT);
+    digitalWrite(TRIG_PINS[i], LOW);
+    pinMode(ECHO_PINS[i], INPUT);
   }
   if (MANGO_PIN >= 0) pinMode(MANGO_PIN, INPUT_PULLUP);
 
@@ -198,5 +270,6 @@ void setup() {
 
 void loop() {
   readSerial();
-  scanSensors();
+  pingNext();
+  scanMango();
 }

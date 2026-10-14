@@ -14,7 +14,7 @@ const good = {
   },
   decision: {
     scan_id: '5',
-    bin_index: 2,
+    bin_index: 5,
     bin_name: 'GREEN_MEDIUM',
     quality_verdict: 'passed',
     reason_code: 'ROUTED_BY_COLOR_SIZE',
@@ -104,11 +104,11 @@ describe('InferenceClient', () => {
 })
 
 describe('fallbackInference', () => {
-  it('rejects into bin 7 with the reason recorded, never silently passing a mango', () => {
+  it('rejects into bin 1 with the reason recorded, never silently passing a mango', () => {
     const r = fallbackInference(9, 'Carabao', 'INFERENCE_UNAVAILABLE')
     expect(r.decision).toMatchObject({
       scan_id: '9',
-      bin_index: 7,
+      bin_index: 1,
       bin_name: 'REJECT_DISEASED',
       quality_verdict: 'rejected',
       reason_code: 'INFERENCE_UNAVAILABLE',

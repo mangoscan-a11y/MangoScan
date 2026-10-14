@@ -1,7 +1,7 @@
 // @vitest-environment node
 import fs from 'node:fs'
 import path from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mongoAvailable } from '../test/mongo.ts'
 import { createHarness, type Harness } from '../test/harness.ts'
 import { setDeclaredVariety } from './settings.ts'
@@ -28,11 +28,32 @@ describe.skipIf(!hasMongo)('Orchestrator', () => {
       for (const img of doc.images) {
         expect(fs.existsSync(path.join(h.storageDir, img.image_path))).toBe(true)
       }
-      expect(h.ctrl.sorts).toEqual([{ scan_id: doc.scan_id, bin: 2, s1: 'group_green', s2: 'slot_medium' }])
+      expect(h.ctrl.sorts).toEqual([{ scan_id: doc.scan_id, bin: 5, s1: 'group_green', s2: 'slot_medium' }])
 
       const stored = await h.t.db.collection('scans').findOne({ scan_id: doc.scan_id })
       expect(stored?.variety).toEqual({ variety_id: 1, variety_name: 'Carabao' })
       expect(h.events.some((e) => e.event === 'scan.created')).toBe(true)
+    })
+
+    it('makes a hardware job wait its turn behind a scan', async () => {
+      const scan = h.orchestrator.scan('manual')
+      const sortsSeenByJob = h.orchestrator.exclusive(async () => h.ctrl.sorts.length)
+      await scan
+      expect(await sortsSeenByJob).toBe(1)
+    })
+
+    it('turns hardware jobs away when the queue is full, like scans', async () => {
+      const release: (() => void)[] = []
+      const held = Array.from({ length: 6 }, () => h.orchestrator.exclusive(() => new Promise<void>((r) => release.push(r))))
+      const err = await h.orchestrator.exclusive(async () => 1).catch((e) => e)
+      expect(err).toBeInstanceOf(ScanError)
+      expect(err.code).toBe('BUSY')
+      await vi.waitFor(() => expect(release.length).toBe(1))
+      for (let i = 0; i < held.length; i++) {
+        await vi.waitFor(() => expect(release.length).toBeGreaterThan(i))
+        release[i]()
+      }
+      await Promise.all(held)
     })
 
     it('records the real servo acknowledgement once it arrives', async () => {
@@ -66,7 +87,7 @@ describe.skipIf(!hasMongo)('Orchestrator', () => {
     })
 
     it('flags a mango routed into a bin that is already full', async () => {
-      await h.bins.report(2, true)
+      await h.bins.report(5, true)
       const doc = await h.orchestrator.scan('manual')
       expect(doc.alerts).toContain('BIN_FULL')
     })
@@ -81,18 +102,18 @@ describe.skipIf(!hasMongo)('Orchestrator', () => {
     it('rejects the mango when no frame can be captured at all', async () => {
       h.cam.failAllCaptures = true
       const doc = await h.orchestrator.scan('manual')
-      expect(doc).toMatchObject({ quality_verdict: 'rejected', bin_index: 7, reason_code: 'CAPTURE_FAILED' })
+      expect(doc).toMatchObject({ quality_verdict: 'rejected', bin_index: 1, reason_code: 'CAPTURE_FAILED' })
       expect(doc.images).toHaveLength(0)
-      expect(h.ctrl.sorts.at(-1)?.bin).toBe(7)
+      expect(h.ctrl.sorts.at(-1)?.bin).toBe(1)
       expect(h.inferenceBodies).toHaveLength(0)
     })
 
-    it('rejects into bin 7 instead of passing fruit when the inference service is down', async () => {
+    it('rejects into bin 1 instead of passing fruit when the inference service is down', async () => {
       h.setInference(() => null)
       const doc = await h.orchestrator.scan('manual')
-      expect(doc).toMatchObject({ quality_verdict: 'rejected', bin_index: 7, reason_code: 'INFERENCE_UNAVAILABLE' })
+      expect(doc).toMatchObject({ quality_verdict: 'rejected', bin_index: 1, reason_code: 'INFERENCE_UNAVAILABLE' })
       expect(doc.images).toHaveLength(5)
-      expect(h.ctrl.sorts.at(-1)?.bin).toBe(7)
+      expect(h.ctrl.sorts.at(-1)?.bin).toBe(1)
     })
 
     it('processes simultaneous triggers one at a time, in order', async () => {

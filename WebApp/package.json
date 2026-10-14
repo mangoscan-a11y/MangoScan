@@ -15,6 +15,9 @@
     "server:watch": "tsx watch server/index.ts",
     "machine": "node scripts/start-all.mjs",
     "machine:mock": "node scripts/start-all.mjs --mock-hardware",
+    "up": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/mango.ps1 start",
+    "up:mock": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/mango.ps1 mock",
+    "down": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/mango.ps1 stop",
     "db:seed": "tsx server/cli/seed.ts",
     "simulator": "tsx scripts/simulator.ts"
   },

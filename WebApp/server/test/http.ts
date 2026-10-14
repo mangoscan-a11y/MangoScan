@@ -18,6 +18,7 @@ export async function startApp(h: Harness, opts: { host?: string; mock?: boolean
     hub: h.hub,
     devices: h.devices,
     orchestrator: h.orchestrator,
+    check: h.check,
     inference: { health: async () => ({ ok: true }) },
     mode: opts.mock ? 'mock' : 'serial',
     mock: opts.mock ? { controller: h.ctrl } : null,
@@ -41,6 +42,7 @@ export interface RawResponse {
   status: number
   headers: http.IncomingHttpHeaders
   body: string
+  bytes: Buffer
 }
 
 /** Plain http.request so tests can set Host and Origin freely. */
@@ -52,9 +54,12 @@ export function raw(
     const r = http.request(
       { host: '127.0.0.1', port, method: req.method ?? 'GET', path: req.path, headers: req.headers },
       (res) => {
-        let body = ''
-        res.on('data', (c) => (body += c))
-        res.on('end', () => resolve({ status: res.statusCode ?? 0, headers: res.headers, body }))
+        const chunks: Buffer[] = []
+        res.on('data', (c: Buffer) => chunks.push(c))
+        res.on('end', () => {
+          const bytes = Buffer.concat(chunks)
+          resolve({ status: res.statusCode ?? 0, headers: res.headers, body: bytes.toString('utf8'), bytes })
+        })
       },
     )
     r.on('error', reject)
